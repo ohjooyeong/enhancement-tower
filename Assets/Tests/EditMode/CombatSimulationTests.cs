@@ -1,0 +1,287 @@
+using EnhancementTower.Combat;
+using NUnit.Framework;
+
+public class CombatSimulationTests
+{
+    private static CombatSimulation Battle() => new CombatSimulation(
+        new Fighter(new Point(-0.7f, -1.8f), 100, 12, 1.9f, 0.85f),
+        new Fighter(new Point(0.8f, 1.8f), 60, 6, 1.4f, 0.85f));
+    [Test]
+    public void ArcRejectsBehindAndOutsideRange()
+    {
+        Assert.IsTrue(CombatSimulation.InArc(new Point(), new Point(0, 1), new Point(0.4f, 0.4f), 1, 180));
+        Assert.IsFalse(CombatSimulation.InArc(new Point(), new Point(0, 1), new Point(0, -0.4f), 1, 180));
+        Assert.IsFalse(CombatSimulation.InArc(new Point(), new Point(0, 1), new Point(0, 2), 1, 180));
+    }
+    [Test]
+    public void RenderRateDoesNotChangeCombat()
+    {
+        var a = Battle(); var b = Battle();
+        for (int i = 0; i < 300; i++) a.Advance(1.0 / 30);
+        for (int i = 0; i < 1200; i++) b.Advance(1.0 / 120);
+        Assert.AreEqual(a.Ticks, b.Ticks);
+        Assert.AreEqual(a.Hero.Health, b.Hero.Health);
+        Assert.AreEqual(a.Monster.Health, b.Monster.Health);
+        Assert.AreEqual(a.Hero.Position.X, b.Hero.Position.X);
+        Assert.AreEqual(a.Hero.Attacks, b.Hero.Attacks);
+    }
+    [Test]
+    public void DuelMaintainsFeetSeparationAndStopsAfterDeath()
+    {
+        var battle = Battle();
+        for (int i = 0; i < 1200; i++)
+        {
+            battle.Advance(CombatSimulation.Tick);
+            Assert.GreaterOrEqual((battle.Hero.Position - battle.Monster.Position).Length, CombatSimulation.FootRadius * 2);
+        }
+        Assert.IsFalse(battle.Monster.Alive);
+        Assert.AreEqual(CombatState.Dead, battle.Monster.State);
+        int health = battle.Hero.Health, attacks = battle.Hero.Attacks;
+        battle.Advance(10);
+        Assert.AreEqual(health, battle.Hero.Health);
+        Assert.AreEqual(attacks, battle.Hero.Attacks);
+    }
+    [Test]
+    public void WindupDoesNotDealImmediateDamage()
+    {
+        var battle = new CombatSimulation(new Fighter(new Point(0, 0), 100, 12, 1, 0.85f),
+            new Fighter(new Point(0, 0.8f), 60, 6, 1, 0.85f));
+        battle.Advance(0.15);
+        Assert.AreEqual(60, battle.Monster.Health);
+        Assert.AreEqual(0, battle.Hero.Movement.Length);
+        Assert.Greater(battle.Hero.Aim.Y, 0);
+    }
+    [Test]
+    public void CleaveHitsFrontWithIndividualDefenseButNotBehindOrOutOfRange()
+    {
+        var hero = new Fighter(new Point(), 1000, 20, 0, 1.2f);
+        var primary = new Fighter(new Point(0, 0.65f), 100, 1, 0, 0.6f);
+        var side = new Fighter(new Point(0.5f, 0.5f), 100, 1, 0, 0.6f, defense: 3);
+        var behind = new Fighter(new Point(0, -0.7f), 100, 1, 0, 0.6f);
+        var far = new Fighter(new Point(0, 1.4f), 100, 1, 0, 0.6f);
+        var battle = new CombatSimulation(hero, primary, side, behind, far);
+        battle.Advance(0.4);
+        Assert.AreSame(primary, hero.Target);
+        Assert.AreEqual(80, primary.Health);
+        Assert.AreEqual(96, side.Health);
+        Assert.AreEqual(100, behind.Health);
+        Assert.AreEqual(100, far.Health);
+        Assert.AreEqual(2, hero.LastHitCount);
+    }
+    [Test]
+    public void CleaveRespectsSecondaryLimitAndDoesNotRepeatDuringRecovery()
+    {
+        var hero = new Fighter(new Point(), 1000, 20, 0, 1.2f);
+        var a = new Fighter(new Point(0, 0.6f), 100, 1, 0, 0.6f);
+        var b = new Fighter(new Point(-0.5f, 0.5f), 100, 1, 0, 0.6f);
+        var c = new Fighter(new Point(0.5f, 0.5f), 100, 1, 0, 0.6f);
+        var battle = new CombatSimulation(hero, new[] { a, b, c }, 0.35f, 1);
+        battle.Advance(0.7);
+        Assert.AreEqual(80, a.Health);
+        Assert.AreEqual(93, b.Health);
+        Assert.AreEqual(100, c.Health);
+        Assert.AreEqual(1, hero.Attacks);
+    }
+    [Test]
+    public void RetargetsAfterKillAndTurnsToEnemyBehind()
+    {
+        var hero = new Fighter(new Point(), 1000, 100, 0, 0.85f);
+        var front = new Fighter(new Point(0, 0.65f), 60, 1, 0, 0.6f);
+        var behind = new Fighter(new Point(0, -0.7f), 60, 1, 0, 0.6f);
+        var battle = new CombatSimulation(hero, front, behind);
+        battle.Advance(0.4);
+        Assert.IsFalse(front.Alive);
+        Assert.IsTrue(behind.Alive);
+        battle.Advance(0.9);
+        Assert.IsFalse(behind.Alive);
+        Assert.Less(hero.AttackAim.Y, 0);
+        battle.Advance(1);
+        Assert.IsNull(hero.Target);
+        Assert.AreEqual(CombatState.Search, hero.State);
+    }
+    private static CombatSimulation Crowd()
+    {
+        return new CombatSimulation(new Fighter(new Point(-0.7f, -1.8f), 240, 12, 1.9f, 0.85f),
+            new Fighter(new Point(0.8f, 1.8f), 60, 6, 1.4f, 0.85f, 0.3f, 0.7f),
+            new Fighter(new Point(-0.45f, 1.55f), 60, 6, 1.4f, 0.85f, 0.3f, 0.7f),
+            new Fighter(new Point(1.5f, 2.65f), 60, 6, 1.4f, 0.85f, 0.3f, 0.7f),
+            new Fighter(new Point(-0.85f, 3), 60, 6, 1.4f, 0.85f, 0.3f, 0.7f),
+            new Fighter(new Point(0.55f, 3.45f), 60, 6, 1.4f, 0.85f, 0.3f, 0.7f));
+    }
+    [Test]
+    public void CrowdHasNoHeroOverlapAndAlwaysTerminates()
+    {
+        var battle = Crowd();
+        for (int tick = 0; tick < 3600; tick++)
+        {
+            battle.Advance(CombatSimulation.Tick);
+            if (battle.Hero.Alive)
+                foreach (var enemy in battle.Monsters)
+                    if (enemy.Alive) Assert.GreaterOrEqual((enemy.Position - battle.Hero.Position).Length, 0.5599f);
+            Assert.That(battle.Hero.Position.X, Is.InRange(-2, 2));
+            Assert.That(battle.Hero.Position.Y, Is.InRange(-3, 4));
+        }
+        Assert.IsTrue(!battle.Hero.Alive || battle.LivingMonsters == 0, "Crowd must not stall indefinitely.");
+    }
+    [Test]
+    public void CrowdIsIdenticalAcrossFrameRates()
+    {
+        var a = Crowd(); var b = Crowd();
+        for (int i = 0; i < 900; i++) a.Advance(1.0 / 30);
+        for (int i = 0; i < 3600; i++) b.Advance(1.0 / 120);
+        Assert.AreEqual(a.Ticks, b.Ticks);
+        Assert.AreEqual(a.Hero.Health, b.Hero.Health);
+        Assert.AreEqual(a.Hero.Position.X, b.Hero.Position.X);
+        for (int i = 0; i < a.Monsters.Count; i++)
+        {
+            Assert.AreEqual(a.Monsters[i].Health, b.Monsters[i].Health);
+            Assert.AreEqual(a.Monsters[i].Position.X, b.Monsters[i].Position.X);
+            Assert.AreEqual(a.Monsters[i].Position.Y, b.Monsters[i].Position.Y);
+            Assert.AreEqual(a.Monsters[i].Attacks, b.Monsters[i].Attacks);
+        }
+    }
+    private static CombatSimulation PressureBattle(bool enabled = true, float heroY = 0, float retreat = 0.8f)
+    {
+        var hero = new Fighter(new Point(0, heroY), 5000, 1, 1.9f, 0.85f);
+        var enemies = new[] {
+            new Fighter(new Point(0, heroY + 0.7f), 5000, 1, 0, 0.85f),
+            new Fighter(new Point(-0.5f, heroY + 0.5f), 5000, 1, 0, 0.85f),
+            new Fighter(new Point(0.5f, heroY + 0.5f), 5000, 1, 0, 0.85f) };
+        return new CombatSimulation(hero, enemies, 0.35f, 3, new RepositionSettings(enabled, retreatDistance: retreat));
+    }
+    [Test]
+    public void PressureStepsAreShortHaveCooldownAndReturnToAttacking()
+    {
+        var battle = PressureBattle();
+        int previousCount = 0, previousStart = -10000;
+        bool sideways = false;
+        for (int tick = 0; tick < 900; tick++)
+        {
+            battle.Advance(CombatSimulation.Tick);
+            if (battle.Repositions != previousCount)
+            {
+                Assert.GreaterOrEqual(tick - previousStart, 179);
+                previousStart = tick; previousCount = battle.Repositions;
+            }
+            if (battle.Hero.State == CombatState.Reposition && battle.Hero.Movement.Length > 0)
+                sideways |= System.Math.Abs(battle.Hero.Movement.X * battle.Hero.Aim.Y - battle.Hero.Movement.Y * battle.Hero.Aim.X) > 0.01f;
+            Assert.GreaterOrEqual(battle.Hero.Position.Y, battle.RetreatFloor - 0.0001f);
+        }
+        Assert.Greater(battle.Repositions, 0);
+        Assert.IsTrue(sideways, "Movement must be independent from aim.");
+        Assert.Greater(battle.Hero.Attacks, battle.Repositions);
+        Assert.LessOrEqual(battle.RepositionTravel, battle.Repositions * 0.5001f);
+        Assert.Greater(battle.Hero.Attacks, 5);
+    }
+    [Test]
+    public void RearBoundaryAndDisabledRepositionKeepHeroFighting()
+    {
+        var battle = PressureBattle(heroY: -3, retreat: 0);
+        var disabled = PressureBattle(false);
+        for (int tick = 0; tick < 600; tick++)
+        {
+            battle.Advance(CombatSimulation.Tick); disabled.Advance(CombatSimulation.Tick);
+            Assert.GreaterOrEqual(battle.Hero.Position.Y, -3);
+            Assert.That(battle.Hero.Position.X, Is.InRange(-2, 2));
+        }
+        Assert.Greater(battle.Hero.Attacks, 5);
+        Assert.AreEqual(0, disabled.Repositions);
+        Assert.Greater(disabled.Hero.Attacks, 5);
+    }
+    [Test]
+    public void FullyBlockedHeroHoldsGroundWithoutCancellingAttacks()
+    {
+        var enemies = new Fighter[8];
+        for (int i = 0; i < enemies.Length; i++)
+        {
+            double angle = i * System.Math.PI / 4;
+            enemies[i] = new Fighter(new Point((float)System.Math.Cos(angle) * 0.6f,
+                (float)System.Math.Sin(angle) * 0.6f), 5000, 1, 0, 0.85f);
+        }
+        var battle = new CombatSimulation(new Fighter(new Point(), 5000, 1, 1.9f, 0.85f), enemies);
+        battle.Advance(10);
+        Assert.AreEqual(0, battle.Repositions);
+        Assert.Greater(battle.Hero.Attacks, 8);
+        Assert.Less(battle.Hero.Position.Length, 0.001f);
+    }
+    private static CombatSimulation Stress(int count)
+    {
+        Point[] positions = { new Point(0.8f, 1.8f), new Point(-0.45f, 1.55f), new Point(1.5f, 2.65f),
+            new Point(-0.85f, 3), new Point(0.55f, 3.45f), new Point(-1.55f, 2.05f),
+            new Point(1.75f, 3.55f), new Point(0.15f, 2.35f), new Point(-1.6f, 3.7f),
+            new Point(1.1f, 2.2f), new Point(-0.35f, 3.85f), new Point(-1.1f, 1.7f) };
+        var enemies = new Fighter[count];
+        for (int i = 0; i < count; i++) enemies[i] = new Fighter(positions[i], 60, 6, 1.4f, 0.85f, 0.3f, 0.7f);
+        return new CombatSimulation(new Fighter(new Point(-0.7f, -1.8f), 500, 12, 1.9f, 0.85f), enemies);
+    }
+    [TestCase(5)]
+    [TestCase(8)]
+    [TestCase(12)]
+    public void StressStaysSeparatedAndBoundedAndMatchesFrameRates(int count)
+    {
+        var a = Stress(count); var b = Stress(count);
+        for (int tick = 0; tick < 3600; tick++)
+        {
+            a.Advance(CombatSimulation.Tick);
+            Assert.GreaterOrEqual(a.Hero.Position.Y, a.RetreatFloor - 0.0001f);
+            Assert.That(a.Hero.Position.X, Is.InRange(-2, 2));
+            foreach (var enemy in a.Monsters)
+            {
+                Assert.That(enemy.Position.X, Is.InRange(-2, 2));
+                Assert.That(enemy.Position.Y, Is.InRange(-3, 4));
+                if (enemy.Alive && a.Hero.Alive)
+                    Assert.GreaterOrEqual((enemy.Position - a.Hero.Position).Length, 0.5599f);
+            }
+        }
+        // Same simulated ticks delivered in batches of four (15 render FPS).
+        for (int frame = 0; frame < 900; frame++) b.Advance(CombatSimulation.Tick * 4.0);
+        Assert.AreEqual(a.Ticks, b.Ticks);
+        Assert.AreEqual(a.Hero.Health, b.Hero.Health);
+        Assert.AreEqual(a.Hero.Attacks, b.Hero.Attacks);
+        Assert.AreEqual(a.Hero.Position.X, b.Hero.Position.X);
+        Assert.AreEqual(a.Hero.Position.Y, b.Hero.Position.Y);
+        Assert.AreEqual(a.Repositions, b.Repositions);
+        for (int i = 0; i < count; i++)
+        {
+            Assert.AreEqual(a.Monsters[i].Health, b.Monsters[i].Health);
+            Assert.AreEqual(a.Monsters[i].Position.X, b.Monsters[i].Position.X);
+        }
+        Assert.IsTrue(!a.Hero.Alive || a.LivingMonsters == 0, "Encounter must not stall.");
+    }
+    [Test]
+    public void CoincidentMonstersSpreadWhileAttackingWithoutInterruptingTheirAttacks()
+    {
+        var enemies = new Fighter[5];
+        for (int i = 0; i < enemies.Length; i++)
+            enemies[i] = new Fighter(new Point(0, 0.7f), 5000, 1, 1.4f, 0.85f);
+        var battle = new CombatSimulation(new Fighter(new Point(), 5000, 1, 0, 0.85f), enemies);
+        battle.Advance(4);
+        float closest = float.MaxValue;
+        for (int i = 0; i < enemies.Length; i++)
+        {
+            Assert.Greater(enemies[i].Attacks, 0, "Separation must not cancel attack timing.");
+            Assert.GreaterOrEqual(enemies[i].Position.Length, 0.5599f);
+            for (int j = i + 1; j < enemies.Length; j++)
+                closest = System.Math.Min(closest, (enemies[i].Position - enemies[j].Position).Length);
+        }
+        Assert.Greater(closest, 0.2f, "A coincident group should visibly spread, including during attacks.");
+    }
+    [Test]
+    public void CrowdCorrectionsAreBoundedAndDeadMonstersDoNotPushSurvivors()
+    {
+        var a = new Fighter(new Point(-0.1f, 0.75f), 5000, 1, 1.4f, 0.85f);
+        var b = new Fighter(new Point(0.1f, 0.75f), 1, 1, 1.4f, 0.85f);
+        var battle = new CombatSimulation(new Fighter(new Point(), 5000, 20, 0, 1.2f), a, b);
+        Point previous = a.Position;
+        for (int i = 0; i < 20; i++)
+        {
+            battle.Advance(CombatSimulation.Tick);
+            Assert.LessOrEqual((a.Position - previous).Length, (a.Speed + 0.6f) * CombatSimulation.Tick + 0.0001f);
+            previous = a.Position;
+        }
+        Assert.IsFalse(b.Alive);
+        Point settled = a.Position;
+        battle.Advance(0.3);
+        Assert.Less((a.Position - settled).Length, 0.001f);
+    }
+}
