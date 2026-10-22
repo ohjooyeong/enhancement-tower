@@ -50,6 +50,14 @@ Build a playable, mobile-first Unity 6 / C# idle action RPG **강화의 탑**. W
 6. After every task report: files added/changed; tested vs untested; design assumptions; steps user must do in Unity Editor; next smallest step.
 7. If a proposed implementation requires an unresolved core design choice, prefer a configurable simple default and write the assumption in docs. Ask only for blocking decisions.
 
+### 커밋 메시지 규칙 (2026-10-22 사용자 지정)
+- 앞으로 작성하는 커밋의 제목과 본문은 **한글**로 쓴다. 파일명·클래스명·API 등 고유한 기술 식별자는 원문을 유지한다.
+- 제목 형식은 `유형: 변경 내용`으로 통일한다. 유형은 `기능`, `수정`, `개선`, `정리`, `테스트`, `문서`, `설정` 중 적절한 것을 사용한다.
+- 제목은 무엇이 달라졌는지 구체적이고 간결하게 쓴다. 예: `기능: 이동과 타겟 선택에 확률 가중치 적용`, `수정: 구석에서 공격이 멈추는 문제 해결`.
+- 본문이 필요한 변경은 이유와 검증 결과·미검증 항목을 한글로 적는다. 단순한 변경에는 불필요한 본문을 붙이지 않는다.
+- 검증과 문서 정리가 끝난 의미 있는 단위로 커밋하며, 사용자 변경이나 관련 없는 파일을 섞지 않는다.
+- 기존 커밋 메시지는 별도 요청 없이 재작성하지 않는다. 원격 푸시는 사용자가 요청할 때만 한다.
+
 ## 6. First milestone (no server, store, final graphics)
 - `CombatPrototype` scene with placeholder sprites, fixed-angle camera, one hero, one melee monster.
 - Target/approach, facing 4 dirs, attack timing, front diagonal slash and damage, hit reactions, death.
