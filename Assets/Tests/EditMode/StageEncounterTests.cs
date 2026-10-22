@@ -112,7 +112,7 @@ public class StageEncounterTests
     public void FiftyEnemyStageReplaysAndEndsWithoutCrossingBounds(int seed)
     {
         var a = Battle(seed); var b = Battle(seed);
-        for (int frame = 0; frame < 2400; frame++)
+        for (int frame = 0; frame < 3000; frame++)
         {
             a.Advance(1.0 / 30);
             Assert.LessOrEqual(a.Simulation.LivingMonsters, a.Settings.MaxAlive);
@@ -125,7 +125,7 @@ public class StageEncounterTests
                     Assert.GreaterOrEqual((enemy.Position - a.Simulation.Hero.Position).Length, 0.55999f);
             }
         }
-        for (int frame = 0; frame < 9600; frame++) b.Advance(1.0 / 120);
+        for (int frame = 0; frame < 12000; frame++) b.Advance(1.0 / 120);
         Assert.AreNotEqual(StageResult.Running, a.Result);
         Assert.AreEqual(a.Result, b.Result); Assert.AreEqual(a.Spawned, b.Spawned);
         Assert.AreEqual(a.Simulation.Ticks, b.Simulation.Ticks);

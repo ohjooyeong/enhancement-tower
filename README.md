@@ -24,4 +24,4 @@ Unity 6000.6.4f1에서 `Assets/Scenes/CombatPrototype.unity`를 열고 Play합�
 일반(빨강)·빠른 약체(노란 작은 마름모)·강한 근접(보라 큰 직사각형)을 섞어 비교합니다. **Include fast foes**로 빠른 적을 켜고 끄면 전투가 재시작됩니다. `Assets/Data/FastMonster.asset`에서 빠른 적의 체력/공격력 배율과 접근/공격 준비 속도를 조절합니다. Mixed Threats를 끄면 전부 일반 적입니다. 영웅 콤보/공속 성장 설정은 추가하지 않았습니다.
 
 
-**Stage run**은 처음 5마리로 시작해 화면 상단에서 순차 합류하는 한 판입니다. 기본 총50/생존상한8/합류1.2초/제한60초는 `Assets/Data/PrototypeStage.asset`에서 조절합니다. Kills·Pending·Time과 CLEAR/DEFEAT/TIME UP을 확인하고 Restart로 재시작합니다. 5/8/12 버튼은 기존 군집 비교로 돌아갑니다. 빠른 적은 낮은 체력 대신 약 .48초 준비+회복으로 근접 압박을 주도록 조정했습니다.
+**Stage run**은 처음 5마리로 시작해 화면 상단에서 순차 합류하는 한 판입니다. 기본 총50/생존상한8/합류1.2초/제한90초는 `Assets/Data/PrototypeStage.asset`에서 조절합니다. Kills·Pending·Time과 CLEAR/DEFEAT/TIME UP을 확인하고 Restart로 재시작합니다. 5/8/12 버튼은 기존 군집 비교로 돌아갑니다. 빠른 적은 낮은 체력 대신 약 .48초 준비+회복으로 근접 압박을 주도록 조정했습니다.

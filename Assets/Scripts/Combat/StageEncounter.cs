@@ -8,7 +8,7 @@ namespace EnhancementTower.Combat
     {
         public readonly int Total, Initial, MaxAlive, IntervalTicks, LimitTicks;
         public StageSettings(int total = 50, int initial = 5, int maxAlive = 8,
-            float spawnInterval = 1.2f, float timeLimit = 60)
+            float spawnInterval = 1.2f, float timeLimit = 90)
         {
             double sum = (double)spawnInterval + timeLimit;
             if (total < 1 || total > 500 || initial < 1 || initial > total || maxAlive < initial || maxAlive > 12 ||

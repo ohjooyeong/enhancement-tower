@@ -18,7 +18,7 @@ Build a playable, mobile-first Unity 6 / C# idle action RPG **강화의 탑**. W
 - Aim and movement vectors are distinct. Hit detection is derived from logic and attack arcs, not VFX appearance or animation frames. Combat simulation is framerate independent.
 - Monsters accumulate if kill rate < spawn pressure; limited lateral reposition and hard retreat limit; no infinite kiting. Player and monsters must not overlap at foot-center; limited monster-monster overlap allowed. No guaranteed perfect auto-dodge.
 - Normal ranged projectiles generally handled by build/defense; clearly telegraphed boss or elite AoE permits limited geometry-based sidestep. Avoid impossible/unreadable patterns.
-- Challenge: finite stage (v0 ~50 enemy kills, ~5 concurrent baseline, ~60 sec test), no Rage. Clear→next; fail twice→appropriate Farming.
+- Challenge: finite stage (v0 ~50 enemy kills, ~5 concurrent baseline, ~90 sec test), no Rage. Clear→next; fail twice→appropriate Farming.
 - Farming: persistent spawns, no per-wave intro, repeatable forward illusion/segments, offline settlement, optional encounter-intro toggle; Rage is manual and **Farming-only**.
 - Hub navigation may be manual; tower combat is autonomous.
 - Visual style: restrained modern handcrafted 2D pixel art; no shiny generic dark-fantasy UI, character EXP/level, or leveled skills in MVP.
