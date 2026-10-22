@@ -58,6 +58,9 @@ namespace EnhancementTower.Combat
         public readonly float Speed, Range, Windup, Recovery;
         public float PhaseTime { get; internal set; }
         public float HitFlash { get; internal set; }
+        public int HitsTaken { get; private set; }
+        public long DamageTaken { get; private set; }
+        internal void RecordDamage(int actualDamage) { HitsTaken++; DamageTaken += actualDamage; }
         public Point HitDirection { get; internal set; }
         public AttackKind LastHitKind { get; internal set; }
         public float SlashTime { get; internal set; }
@@ -631,7 +634,9 @@ namespace EnhancementTower.Combat
         }
         private void DealHit(Fighter attacker, Fighter target, int rawDamage)
         {
+            int beforeHealth = target.Health;
             target.Health = Math.Max(0, target.Health - Math.Max(1, rawDamage - target.Defense));
+            target.RecordDamage(beforeHealth - target.Health);
             target.LastHitKind = attacker.CurrentAttack.Kind;
             target.HitDirection = (target.Position - attacker.Position).Normalized;
             target.HitFlash = target.LastHitKind == AttackKind.Thrust ? 0.2f : 0.14f;

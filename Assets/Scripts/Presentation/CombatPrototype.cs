@@ -28,6 +28,11 @@ namespace EnhancementTower.Presentation
         [SerializeField] private bool randomizeSeedEachRun = true;
         [SerializeField] private int fixedSeed = 12345;
         private int seedCounter;
+        [SerializeField] private bool showHitEffects = true, showDamageNumbers = true, playCombatSounds = true;
+        [SerializeField] private bool showAttackArea;
+        private LineRenderer attackArea;
+        [SerializeField, Range(0, 1)] private float combatVolume = 0.18f;
+        private PrototypeCombatFeedback feedback;
         private bool wallTest, trapTest;
         private CombatSimulation simulation;
         private Sprite square;
@@ -37,7 +42,9 @@ namespace EnhancementTower.Presentation
         private Camera viewCamera;
         private sealed class ActorView
         {
-            public Transform Root, Facing, Slash;
+            public Transform Root, Facing, Slash, Windup;
+            public SpriteRenderer WindupRenderer;
+            public PrototypeCombatFeedback.ActorFeedback Feedback;
             public SpriteRenderer Body, Blade, Direction, HealthBack, HealthFill, TargetMarker;
             public Color Color;
         }
@@ -47,14 +54,21 @@ namespace EnhancementTower.Presentation
             square = Sprite.Create(texture, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), 1);
             var cameraObject = new GameObject("Fixed Camera"); cameraObject.transform.SetParent(transform);
             viewCamera = cameraObject.AddComponent<Camera>();
+            cameraObject.AddComponent<AudioListener>();
+            feedback = new PrototypeCombatFeedback(transform, square);
             viewCamera.orthographic = true; viewCamera.backgroundColor = new Color(0.07f, 0.09f, 0.12f);
             cameraObject.transform.SetPositionAndRotation(new Vector3(0, 0.6f, -10), Quaternion.identity);
             MakeSprite("Arena", transform, new Vector3(0, 0.5f, 0), new Vector2(4.56f, 7.56f), new Color(0.15f, 0.19f, 0.21f), -1000);
             heroView = MakeActor("Hero", new Color(0.25f, 0.7f, 0.95f));
+            var guide = new GameObject("Attack area guide"); guide.transform.SetParent(heroView.Root, false);
+            attackArea = guide.AddComponent<LineRenderer>(); attackArea.useWorldSpace = false;
+            attackArea.sharedMaterial = heroView.Body.sharedMaterial; attackArea.positionCount = 19;
+            attackArea.startWidth = attackArea.endWidth = 0.018f; attackArea.enabled = false;
             Restart();
         }
         private void Restart()
         {
+            feedback.ResetRun(); feedback.Reset(heroView.Feedback);
             if (monsterViews != null)
                 for (int i = 0; i < monsterViews.Length; i++) Destroy(monsterViews[i].Root.gameObject);
             int count = trapTest ? 8 : wallTest ? 3 : Mathf.Clamp(monsterCount, 1, 12);
@@ -100,6 +114,9 @@ namespace EnhancementTower.Presentation
             result.HealthBack = MakeSprite("Health Background", root, new Vector3(0, 0.76f, 0), new Vector2(0.55f, 0.06f), Color.black, 5);
             result.HealthFill = MakeSprite("Health", root, new Vector3(0, 0.76f, 0), new Vector2(0.55f, 0.04f), Color.green, 6);
             result.TargetMarker = MakeSprite("Current Target", root, new Vector3(0, -0.13f, 0), new Vector2(0.38f, 0.04f), Color.yellow, 4);
+            result.Feedback = feedback.CreateActor(root);
+            result.WindupRenderer = MakeSprite("Attack preparation", root, new Vector3(0, 0.3f, 0), new Vector2(0.3f, 0.04f), Color.yellow, 3);
+            result.Windup = result.WindupRenderer.transform;
             result.Blade = MakeSprite("Diagonal Slash", root, Vector3.zero, new Vector2(0.85f, 0.07f), Color.yellow, 3);
             result.Slash = result.Blade.transform;
             return result;
@@ -110,9 +127,36 @@ namespace EnhancementTower.Presentation
             simulation.Advance(Time.deltaTime);
             // Preserve the entire field on narrow portrait displays, with a fixed orientation.
             viewCamera.orthographicSize = Mathf.Max(4.7f, 2.65f / viewCamera.aspect);
+            feedback.Effects = showHitEffects; feedback.Numbers = showDamageNumbers;
+            feedback.Sound = playCombatSounds; feedback.Volume = combatVolume;
+            feedback.BeginFrame(simulation.Hero);
+            feedback.UpdateActor(heroView.Feedback, simulation.Hero, true, Time.unscaledDeltaTime);
             Draw(heroView, simulation.Hero, false);
+            DrawAttackArea();
             for (int i = 0; i < monsterViews.Length; i++)
+            {
+                feedback.UpdateActor(monsterViews[i].Feedback, simulation.Monsters[i], false, Time.unscaledDeltaTime);
                 Draw(monsterViews[i], simulation.Monsters[i], simulation.Hero.Target == simulation.Monsters[i]);
+            }
+        }
+        private void DrawAttackArea()
+        {
+            Fighter actor = simulation.Hero; AttackStep step = actor.CurrentAttack;
+            attackArea.enabled = showAttackArea && actor.Alive && actor.State == CombatState.Attack && actor.PhaseTime < step.Windup + step.Active;
+            if (!attackArea.enabled) return;
+            float angle = Mathf.Atan2(actor.AttackAim.Y, actor.AttackAim.X);
+            float half = step.Arc * Mathf.Deg2Rad * 0.5f;
+            float range = actor.Range * step.RangeScale;
+            Color color = PrototypeCombatFeedback.AttackColor(step.Kind); color.a = 0.35f;
+            attackArea.startColor = attackArea.endColor = color;
+            attackArea.sortingOrder = 101 - Mathf.RoundToInt(actor.Position.Y * 20);
+            attackArea.SetPosition(0, Vector3.zero);
+            for (int i = 0; i <= 16; i++)
+            {
+                float direction = angle - half + 2 * half * i / 16;
+                attackArea.SetPosition(i + 1, new Vector3(Mathf.Cos(direction) * range, Mathf.Sin(direction) * range, 0));
+            }
+            attackArea.SetPosition(18, Vector3.zero);
         }
         private static void Draw(ActorView view, Fighter fighter, bool targeted)
         {
@@ -142,6 +186,16 @@ namespace EnhancementTower.Presentation
             float progress = Mathf.Clamp01(1 - fighter.SlashTime / duration);
             float angle = Mathf.Atan2(attack.y, attack.x) * Mathf.Rad2Deg;
             bool thrust = step.Kind == AttackKind.Thrust;
+            bool preparing = fighter.Alive && fighter.State == CombatState.Attack && fighter.PhaseTime < step.Windup;
+            view.WindupRenderer.enabled = preparing;
+            float preparation = step.Windup > 0 ? Mathf.Clamp01(fighter.PhaseTime / step.Windup) : 0;
+            float windupAngle = thrust ? angle : angle + (step.Kind == AttackKind.ReverseSlash ? 65 : -55);
+            view.Windup.localRotation = Quaternion.Euler(0, 0, windupAngle);
+            view.Windup.localPosition = (Vector3)(attack * Mathf.Lerp(0.15f, 0.3f, preparation)) + new Vector3(0, 0.3f, 0);
+            view.Windup.localScale = new Vector3(Mathf.Lerp(0.15f, step.Kind == AttackKind.Breakthrough ? 0.65f : 0.35f, preparation), step.Kind == AttackKind.Breakthrough ? 0.1f : 0.045f, 1);
+            Color prepareColor = PrototypeCombatFeedback.AttackColor(step.Kind);
+            view.WindupRenderer.color = new Color(prepareColor.r, prepareColor.g, prepareColor.b, Mathf.Lerp(0.2f, 0.85f, preparation));
+            view.WindupRenderer.sortingOrder = depth + 2;
             float sweep = step.Kind == AttackKind.ReverseSlash ? 65 - progress * 130 : -55 + progress * 110;
             view.Slash.localPosition = (Vector3)(attack * (thrust ? 0.35f + Mathf.Sin(progress * Mathf.PI) * 0.4f : 0.5f)) + new Vector3(0, 0.3f, 0);
             view.Slash.localRotation = Quaternion.Euler(0, 0, angle + (thrust ? 0 : sweep));
@@ -152,6 +206,12 @@ namespace EnhancementTower.Presentation
         private void OnGUI()
         {
             if (simulation == null) return;
+            feedback.DrawNumber(heroView.Feedback, viewCamera);
+            for (int i = 0; i < monsterViews.Length; i++) feedback.DrawNumber(monsterViews[i].Feedback, viewCamera);
+            showHitEffects = GUI.Toggle(new Rect(12, 430, 110, 30), showHitEffects, "Hit sparks");
+            showDamageNumbers = GUI.Toggle(new Rect(130, 430, 100, 30), showDamageNumbers, "Damage");
+            playCombatSounds = GUI.Toggle(new Rect(245, 430, 110, 30), playCombatSounds, "Sound");
+            showAttackArea = GUI.Toggle(new Rect(12, 462, 160, 30), showAttackArea, "Attack area");
             GUI.Label(new Rect(12, 12, 400, 30), $"Hero {simulation.Hero.Health}/{heroHealth}  {simulation.Hero.State}");
             GUI.Label(new Rect(12, 40, 400, 30), $"Enemies {simulation.LivingMonsters}/{simulation.Monsters.Count} | Swing hits: {simulation.Hero.LastHitCount}");
             if (!simulation.Hero.Alive || simulation.LivingMonsters == 0)
@@ -175,6 +235,6 @@ namespace EnhancementTower.Presentation
             bool reposition = GUI.Toggle(new Rect(12, 176, 260, 30), enableReposition, "Pressure reposition");
             if (reposition != enableReposition) { enableReposition = reposition; Restart(); }
         }
-        private void OnDestroy() { if (square != null) Destroy(square); if (texture != null) Destroy(texture); }
+        private void OnDestroy() { feedback?.Dispose(); if (square != null) Destroy(square); if (texture != null) Destroy(texture); }
     }
 }

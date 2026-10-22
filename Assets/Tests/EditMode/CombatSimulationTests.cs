@@ -809,4 +809,36 @@ public class CombatSimulationTests
         Assert.AreEqual(a.MovementChoices, b.MovementChoices);
         Assert.AreEqual(a.TargetChoices, b.TargetChoices);
     }
+    [Test]
+    public void DamageFeedbackFactsIncludeLethalHitWithoutOverkillOrDuplicateHits()
+    {
+        var hero = new Fighter(new Point(), 1000, 20, 0, 1.2f);
+        var lethal = new Fighter(new Point(0, 0.65f), 7, 1, 0, 0.6f);
+        var defended = new Fighter(new Point(0.5f, 0.5f), 100, 1, 0, 0.6f, defense: 3);
+        var battle = new CombatSimulation(hero, lethal, defended);
+        battle.Advance(0.4);
+        Assert.AreEqual(1, lethal.HitsTaken);
+        Assert.AreEqual(7L, lethal.DamageTaken);
+        Assert.AreEqual(1, defended.HitsTaken);
+        Assert.AreEqual(17L, defended.DamageTaken);
+        battle.Advance(0.3);
+        Assert.AreEqual(1, lethal.HitsTaken);
+        Assert.AreEqual(1, defended.HitsTaken);
+        Assert.AreEqual(17L, defended.DamageTaken);
+    }
+    [Test]
+    public void FeedbackDamageTotalsMatchHealthAcrossLargeTimeStepsAndFrameBatches()
+    {
+        var a = Crowd(); var b = Crowd();
+        a.Advance(12);
+        for (int i = 0; i < 720; i++) b.Advance(1.0 / 60);
+        Assert.AreEqual(a.Hero.DamageTaken, b.Hero.DamageTaken);
+        Assert.AreEqual((long)(a.Hero.MaxHealth - a.Hero.Health), a.Hero.DamageTaken);
+        for (int i = 0; i < a.Monsters.Count; i++)
+        {
+            Assert.AreEqual((long)(a.Monsters[i].MaxHealth - a.Monsters[i].Health), a.Monsters[i].DamageTaken);
+            Assert.AreEqual(a.Monsters[i].DamageTaken, b.Monsters[i].DamageTaken);
+            Assert.AreEqual(a.Monsters[i].HitsTaken, b.Monsters[i].HitsTaken);
+        }
+    }
 }
