@@ -50,6 +50,7 @@ namespace EnhancementTower.Combat
         public readonly float ThreatWeight;
         public Fighter Target { get; internal set; }
         internal Fighter AttackTarget;
+        internal float TargetHold;
         public AttackStep CurrentAttack { get; internal set; }
         public int ComboIndex { get; internal set; }
         public int LastHitCount { get; internal set; }
@@ -96,17 +97,18 @@ namespace EnhancementTower.Combat
     {
         public readonly bool Enabled;
         public readonly float BlockSeconds, Cooldown, AdvanceDistance, PushDistance, MinimumImprovement;
-        public readonly float ThreatWeight, WallWeight, EngagementWeight;
+        public readonly float ThreatWeight, WallWeight, EngagementWeight, MovementTemperature, TargetTemperature;
         public readonly AttackStep Breakthrough;
         public TacticalSettings(bool enabled = true, float blockSeconds = 1.2f, float cooldown = 8,
             float advanceDistance = 0.4f, float pushDistance = 0.5f, float minimumImprovement = 0.12f,
-            float threatWeight = 1, float wallWeight = 0.8f, float engagementWeight = 0.8f, AttackStep? breakthrough = null)
+            float threatWeight = 1, float wallWeight = 0.8f, float engagementWeight = 0.8f, AttackStep? breakthrough = null, float movementTemperature = 0, float targetTemperature = 0)
         {
-            float sum = blockSeconds + cooldown + advanceDistance + pushDistance + minimumImprovement + threatWeight + wallWeight + engagementWeight;
+            float sum = movementTemperature + targetTemperature + blockSeconds + cooldown + advanceDistance + pushDistance + minimumImprovement + threatWeight + wallWeight + engagementWeight;
             if (float.IsNaN(sum) || float.IsInfinity(sum) || blockSeconds < 0.5f || cooldown < 3 ||
                 advanceDistance <= 0 || advanceDistance > 0.6f || pushDistance <= 0 || pushDistance > 0.6f ||
-                minimumImprovement < 0 || threatWeight < 0 || wallWeight < 0 || engagementWeight < 0)
+                movementTemperature < 0 || movementTemperature > 3 || targetTemperature < 0 || targetTemperature > 3 || minimumImprovement < 0 || threatWeight < 0 || wallWeight < 0 || engagementWeight < 0)
                 throw new ArgumentOutOfRangeException(nameof(blockSeconds));
+            MovementTemperature = movementTemperature; TargetTemperature = targetTemperature;
             Enabled = enabled; BlockSeconds = blockSeconds; Cooldown = cooldown; AdvanceDistance = advanceDistance;
             PushDistance = pushDistance; MinimumImprovement = minimumImprovement; ThreatWeight = threatWeight;
             WallWeight = wallWeight; EngagementWeight = engagementWeight;
@@ -153,10 +155,27 @@ namespace EnhancementTower.Combat
         private float advanceRemaining, advanceTime;
         private bool constrained, advanceEnded;
         private int nextConstraintCheck;
+        public readonly int Seed;
+        private uint randomState;
+        private struct MoveOption { public Point Goal, Next; public bool Bent; public float Cost; }
+        private readonly MoveOption[] moveOptions = new MoveOption[48];
+        private readonly double[] choiceScores;
+        public int MovementChoices { get; private set; }
+        public int TargetChoices { get; private set; }
         public CombatSimulation(Fighter hero, params Fighter[] monsters) : this(hero, monsters, null) { }
-        public CombatSimulation(Fighter hero, Fighter[] monsters, AttackStep[] attacks, RepositionSettings reposition = null, float knockbackDistance = 0, TacticalSettings tactics = null)
+        public CombatSimulation(Fighter hero, Fighter[] monsters, AttackStep[] attacks, RepositionSettings reposition = null, float knockbackDistance = 0, TacticalSettings tactics = null, int seed = 1)
         {
             if (hero == null || monsters == null || monsters.Length == 0) throw new ArgumentException("A hero and enemies are required.");
+            Seed = seed;
+            unchecked
+            {
+                randomState = (uint)seed ^ 0x9e3779b9u;
+                randomState = (randomState ^ (randomState >> 16)) * 0x85ebca6bu;
+                randomState = (randomState ^ (randomState >> 13)) * 0xc2b2ae35u;
+                randomState ^= randomState >> 16;
+            }
+            if (randomState == 0) randomState = 0x6d2b79f5u;
+            choiceScores = new double[Math.Max(48, monsters.Length)];
             Tactics = tactics ?? new TacticalSettings(false);
             combo = attacks == null ? AttackStep.DefaultCombo(hero.Windup, hero.Recovery) : (AttackStep[])attacks.Clone();
             if (combo.Length == 0) throw new ArgumentException("Combo cannot be empty.");
@@ -177,7 +196,7 @@ namespace EnhancementTower.Combat
             Monsters = Array.AsReadOnly(enemies);
 
         }
-        private Fighter SelectTarget(Fighter actor)
+        private Fighter NearestTarget(Fighter actor)
         {
             if (actor != Hero) return Hero.Alive ? Hero : null;
             Fighter best = null; float distance = float.MaxValue;
@@ -188,6 +207,50 @@ namespace EnhancementTower.Combat
                 if (candidate < distance) { best = enemies[i]; distance = candidate; }
             }
             return best;
+        }
+        // AI focus is sampled at decision boundaries. Swing victims still follow geometry/nearest-first.
+        private Fighter SelectTarget(Fighter actor)
+        {
+            Fighter nearest = NearestTarget(actor);
+            if (actor != Hero || nearest == null || !Tactics.Enabled || Tactics.TargetTemperature <= 0) return nearest;
+            float nearestDistance = (nearest.Position - actor.Position).Length;
+            float range = actor.Range * combo[actor.ComboIndex].RangeScale;
+            for (int i = 0; i < enemies.Length; i++)
+            {
+                Fighter enemy = enemies[i];
+                float distance = (enemy.Position - actor.Position).Length;
+                choiceScores[i] = double.PositiveInfinity;
+                if (!enemy.Alive || distance > nearestDistance + 0.75f) continue;
+                if (distance > range + RangeTolerance &&
+                    (ReachableStep(actor.Position, (enemy.Position - actor.Position).Normalized, 0.25f) - actor.Position).Length < 0.1f) continue;
+                float health = (float)enemy.Health / enemy.MaxHealth;
+                choiceScores[i] = distance / range + health * 0.25f - Math.Min(3, enemy.ThreatWeight) * 0.15f;
+            }
+            int selected = WeightedIndex(enemies.Length, Tactics.TargetTemperature);
+            TargetChoices++;
+            return selected < 0 ? nearest : enemies[selected];
+        }
+        private int WeightedIndex(int count, float temperature)
+        {
+            double best = double.PositiveInfinity, total = 0;
+            for (int i = 0; i < count; i++) best = Math.Min(best, choiceScores[i]);
+            if (double.IsPositiveInfinity(best)) return -1;
+            for (int i = 0; i < count; i++)
+            {
+                choiceScores[i] = double.IsPositiveInfinity(choiceScores[i]) ? 0 : Math.Exp(-(choiceScores[i] - best) / temperature);
+                total += choiceScores[i];
+            }
+            // Local xorshift32: deterministic across render rates, independent from UnityEngine.Random.
+            randomState ^= randomState << 13; randomState ^= randomState >> 17; randomState ^= randomState << 5;
+            double pick = (randomState / 4294967296.0) * total;
+            int last = -1;
+            for (int i = 0; i < count; i++)
+            {
+                if (choiceScores[i] <= 0) continue;
+                last = i; pick -= choiceScores[i];
+                if (pick < 0) return i;
+            }
+            return last;
         }
         public void Advance(double seconds)
         {
@@ -210,14 +273,18 @@ namespace EnhancementTower.Combat
         }
         private void Step(Fighter actor)
         {
+            float previousMovement = actor.Movement.Length;
+            actor.TargetHold = Math.Max(0, actor.TargetHold - Tick);
             actor.Movement = new Point();
             actor.KnockbackCooldown = Math.Max(0, actor.KnockbackCooldown - Tick);
             actor.HitFlash = Math.Max(0, actor.HitFlash - Tick);
             actor.SlashTime = Math.Max(0, actor.SlashTime - Tick);
             if (!actor.Alive) { actor.State = CombatState.Dead; actor.Target = null; return; }
             // Retain targets during approach/attack; reacquire between attacks or after death.
-            if (actor.State == CombatState.Search || actor.Target == null || !actor.Target.Alive)
-                actor.Target = SelectTarget(actor);
+            bool keepSwingFocus = actor == Hero && actor.State == CombatState.Attack && actor.Target != null &&
+                !actor.Target.Alive && LivingMonsters > 0;
+            if (!keepSwingFocus && (actor.State == CombatState.Search || actor.Target == null || !actor.Target.Alive))
+            { actor.Target = SelectTarget(actor); actor.TargetHold = 0.35f; }
             Fighter target = actor.Target;
             if (target == null) { actor.State = CombatState.Search; if (actor == Hero) repositioning = false; return; }
             float approachRange = actor == Hero ? actor.Range * combo[actor.ComboIndex].RangeScale : actor.Range;
@@ -226,10 +293,11 @@ namespace EnhancementTower.Combat
             if (actor == Hero && actor.State == CombatState.Approach &&
                 !WithinRange(actor.Position, target.Position, approachRange))
             {
-                Fighter nearest = SelectTarget(actor);
+                Fighter nearest = NearestTarget(actor);
                 if (nearest != null && nearest != target &&
                     (WithinRange(actor.Position, nearest.Position, approachRange) ||
-                    (nearest.Position - actor.Position).Length + 0.05f < (target.Position - actor.Position).Length))
+                    ((!Tactics.Enabled || Tactics.TargetTemperature <= 0 || (actor.TargetHold <= 0 && previousMovement < 0.0001f)) &&
+                    (nearest.Position - actor.Position).Length + 0.05f < (target.Position - actor.Position).Length)))
                     actor.Target = target = nearest;
             }
             Point delta = target.Position - actor.Position;
@@ -405,6 +473,7 @@ namespace EnhancementTower.Combat
         {
             if (!RepositionRules.Enabled || Hero.Speed <= 0 || RepositionCooldown > 0 ||
                 Pressure < RepositionRules.PressureThreshold) return false;
+            if (Tactics.Enabled && Tactics.MovementTemperature > 0) return TrySampleReposition();
             float best = EscapeScore(Hero.Position) - (Tactics.Enabled ? Tactics.MinimumImprovement : 0.05f);
             bool found = false;
             hasRepositionNext = false;
@@ -435,6 +504,44 @@ namespace EnhancementTower.Combat
             if (!found) return false; // Hold ground and attack if no useful space exists.
             LastRepositionDirection = (repositionGoal - Hero.Position).Normalized;
             repositioning = true; Repositions++; RepositionCooldown = RepositionRules.Cooldown;
+            return true;
+        }
+        private bool TrySampleReposition()
+        {
+            float threshold = EscapeScore(Hero.Position) - Tactics.MinimumImprovement;
+            int count = 0;
+            for (int heading = 0; heading < 16; heading++)
+            {
+                for (int length = 0; length < 3; length++)
+                {
+                    float distance = RepositionRules.Distance * (0.5f + length * 0.25f);
+                    Point direct = ReachableStep(Hero.Position, Heading(heading), distance);
+                    var option = new MoveOption { Goal = direct, Cost = float.MaxValue };
+                    if ((direct - Hero.Position).Length >= distance * 0.6f) option.Cost = EscapeScore(direct);
+                    float half = distance * 0.5f;
+                    Point corner = ReachableStep(Hero.Position, Heading(heading), half);
+                    if ((corner - Hero.Position).Length >= half * 0.8f)
+                    {
+                        for (int turn = 0; turn < 16; turn++)
+                        {
+                            Point end = ReachableStep(corner, Heading(turn), half);
+                            if ((end - corner).Length < half * 0.8f) continue;
+                            float cost = EscapeScore(end) + 0.015f;
+                            if (cost >= option.Cost) continue;
+                            option = new MoveOption { Goal = corner, Next = end, Bent = true, Cost = cost };
+                        }
+                    }
+                    if (option.Cost >= threshold) continue;
+                    // One route per heading/length prevents many similar bends inflating a direction's odds.
+                    moveOptions[count] = option; choiceScores[count++] = option.Cost;
+                }
+            }
+            int selected = WeightedIndex(count, Tactics.MovementTemperature);
+            if (selected < 0) return false;
+            MoveOption chosen = moveOptions[selected];
+            repositionGoal = chosen.Goal; repositionNext = chosen.Next; hasRepositionNext = chosen.Bent;
+            LastRepositionDirection = (repositionGoal - Hero.Position).Normalized;
+            MovementChoices++; Repositions++; repositioning = true; RepositionCooldown = RepositionRules.Cooldown;
             return true;
         }
         private static Point Heading(int index)

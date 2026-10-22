@@ -14,6 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EnhancementTower.Data.CombatTacticsDefinition
   enabledTactics: 1
   mixedThreats: 1
+  movementTemperature: 0.35
+  targetTemperature: 0.55
   strongEnemyThreat: 1.8
   blockedSeconds: 1.2
   breakthroughCooldown: 8

@@ -680,4 +680,133 @@ public class CombatSimulationTests
         Assert.Greater(battle.BreakthroughTravel, 0.03f);
         Assert.Greater(hero.Attacks, 5);
     }
+    private static CombatSimulation RandomChoices(int seed)
+    {
+        var hero = new Fighter(new Point(), 5000, 1, 1.9f, 1.2f);
+        var enemies = new[] {
+            new Fighter(new Point(0, 0.6f), 5000, 1, 0, 0.6f),
+            new Fighter(new Point(0.4f, 0.65f), 5000, 1, 0, 0.6f),
+            new Fighter(new Point(0, 1.1f), 5000, 1, 0, 0.6f) };
+        return new CombatSimulation(hero, enemies, null, tactics:
+            new TacticalSettings(movementTemperature: 0.35f, targetTemperature: 0.55f), seed: seed);
+    }
+    [Test]
+    public void WeightedTargetsPreferCloserEnemyButSometimesChooseLowerScoredEnemy()
+    {
+        var counts = new int[3];
+        for (int seed = 0; seed < 512; seed++)
+        {
+            var battle = RandomChoices(seed);
+            battle.Advance(CombatSimulation.Tick);
+            for (int i = 0; i < counts.Length; i++)
+                if (battle.Hero.Target == battle.Monsters[i]) counts[i]++;
+        }
+        Assert.Greater(counts[0], counts[2], "Nearest should be more likely than furthest.");
+        for (int i = 0; i < counts.Length; i++) Assert.Greater(counts[i], 10, "Lower ranked legal targets must remain possible.");
+    }
+    [Test]
+    public void WeightedFocusStaysLockedDuringAttackAndDoesNotRandomizeSwingVictims()
+    {
+        var battle = RandomChoices(7);
+        battle.Advance(CombatSimulation.Tick);
+        Fighter chosen = battle.Hero.Target;
+        battle.Advance(0.5);
+        Assert.AreSame(chosen, battle.Hero.Target);
+        Assert.AreEqual(1, battle.TargetChoices);
+        Assert.AreEqual(3, battle.Hero.LastHitCount);
+        for (int i = 0; i < 3; i++) Assert.AreEqual(4999, battle.Monsters[i].Health);
+    }
+    [Test]
+    public void RandomMovementVariesDirectionOrDistanceAcrossSeeds()
+    {
+        var endpoints = new System.Collections.Generic.HashSet<string>();
+        var distances = new System.Collections.Generic.HashSet<int>();
+        for (int seed = 0; seed < 48; seed++)
+        {
+            var battle = RandomChoices(seed);
+            for (int tick = 0; tick < 180 && battle.Repositions == 0; tick++) battle.Advance(CombatSimulation.Tick);
+            for (int tick = 0; tick < 60 && battle.Hero.State == CombatState.Reposition; tick++) battle.Advance(CombatSimulation.Tick);
+            Assert.Greater(battle.MovementChoices, 0);
+            endpoints.Add(battle.Hero.Position.X.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + ":" +
+                battle.Hero.Position.Y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
+            distances.Add((int)System.Math.Round(battle.RepositionTravel * 100));
+            Assert.LessOrEqual(battle.RepositionTravel, 0.5001f);
+            Assert.GreaterOrEqual(battle.Hero.Position.Y, battle.RetreatFloor - 0.0001f);
+            foreach (var enemy in battle.Monsters) Assert.GreaterOrEqual((enemy.Position - battle.Hero.Position).Length, 0.5599f);
+        }
+        Assert.Greater(endpoints.Count, 3);
+        Assert.Greater(distances.Count, 1);
+    }
+    [Test]
+    public void RandomDecisionsWithSameSeedMatchAcrossFrameBatches()
+    {
+        var a = RandomChoices(725); var b = RandomChoices(725);
+        for (int tick = 0; tick < 1200; tick++) a.Advance(CombatSimulation.Tick);
+        for (int frame = 0; frame < 300; frame++) b.Advance(CombatSimulation.Tick * 4.0);
+        Assert.AreEqual(a.Hero.Health, b.Hero.Health);
+        Assert.AreEqual(a.Hero.Position.X, b.Hero.Position.X);
+        Assert.AreEqual(a.Hero.Position.Y, b.Hero.Position.Y);
+        Assert.AreEqual(a.MovementChoices, b.MovementChoices);
+        Assert.AreEqual(a.TargetChoices, b.TargetChoices);
+        Assert.AreEqual(a.RepositionTravel, b.RepositionTravel);
+        for (int i = 0; i < 3; i++) Assert.AreEqual(a.Monsters[i].Health, b.Monsters[i].Health);
+    }
+    [Test]
+    public void DeadFocusDoesNotRerollOrCancelRemainingActiveSwing()
+    {
+        var hero = new Fighter(new Point(), 5000, 20, 0, 0.85f);
+        var focus = new Fighter(new Point(0, 0.6f), 1, 1, 0, 0.6f);
+        var late = new Fighter(new Point(0, 2), 100, 1, 0, 0.6f);
+        var battle = new CombatSimulation(hero, new[] { focus, late }, null,
+            tactics: new TacticalSettings(movementTemperature: 0.35f, targetTemperature: 0.55f));
+        battle.Advance(0.28);
+        Assert.IsFalse(focus.Alive);
+        Assert.AreEqual(1, battle.TargetChoices);
+        late.Position = new Point(0, 0.75f);
+        battle.Advance(0.1);
+        Assert.AreEqual(80, late.Health);
+        Assert.AreEqual(1, battle.TargetChoices);
+        Assert.AreEqual(1, hero.Attacks);
+    }
+    [TestCase(3)]
+    [TestCase(71)]
+    [TestCase(804)]
+    public void RandomizedTwelveEnemyRunStaysSafeAndReplaysExactly(int seed)
+    {
+        var originalA = Stress(12); var originalB = Stress(12);
+        var enemiesA = new Fighter[12]; var enemiesB = new Fighter[12];
+        for (int i = 0; i < 12; i++)
+        {
+            bool strong = i % 4 == 3;
+            enemiesA[i] = new Fighter(originalA.Monsters[i].Position, 60, strong ? 9 : 6,
+                strong ? 1.05f : 1.4f, 0.85f, strong ? 0.5f : 0.3f, strong ? 0.9f : 0.7f, threatWeight: strong ? 1.8f : 1);
+            enemiesB[i] = new Fighter(originalB.Monsters[i].Position, 60, strong ? 9 : 6,
+                strong ? 1.05f : 1.4f, 0.85f, strong ? 0.5f : 0.3f, strong ? 0.9f : 0.7f, threatWeight: strong ? 1.8f : 1);
+        }
+        var settings = new TacticalSettings(movementTemperature: 0.35f, targetTemperature: 0.55f);
+        var a = new CombatSimulation(originalA.Hero, enemiesA, null, knockbackDistance: 0.3f, tactics: settings, seed: seed);
+        var b = new CombatSimulation(originalB.Hero, enemiesB, null, knockbackDistance: 0.3f, tactics: settings, seed: seed);
+        int attacks = 0, silent = 0;
+        for (int tick = 0; tick < 3600; tick++)
+        {
+            a.Advance(CombatSimulation.Tick);
+            Assert.That(a.Hero.Position.X, Is.InRange(-2, 2));
+            Assert.GreaterOrEqual(a.Hero.Position.Y, a.RetreatFloor - 0.0001f);
+            if (a.Hero.Alive && a.LivingMonsters > 0)
+            {
+                silent = a.Hero.Attacks == attacks ? silent + 1 : 0;
+                Assert.Less(silent, 300);
+                foreach (var enemy in a.Monsters)
+                    if (enemy.Alive) Assert.GreaterOrEqual((a.Hero.Position - enemy.Position).Length, 0.5599f);
+            }
+            attacks = a.Hero.Attacks;
+        }
+        for (int frame = 0; frame < 900; frame++) b.Advance(CombatSimulation.Tick * 4.0);
+        Assert.IsTrue(!a.Hero.Alive || a.LivingMonsters == 0);
+        Assert.AreEqual(a.Hero.Health, b.Hero.Health);
+        Assert.AreEqual(a.Hero.Position.X, b.Hero.Position.X);
+        Assert.AreEqual(a.Hero.Position.Y, b.Hero.Position.Y);
+        Assert.AreEqual(a.MovementChoices, b.MovementChoices);
+        Assert.AreEqual(a.TargetChoices, b.TargetChoices);
+    }
 }

@@ -25,6 +25,9 @@ namespace EnhancementTower.Presentation
             new Vector2(0.3f, 0.4f), new Vector2(-1.15f, 2.05f), new Vector2(-1.9f, -0.1f)
         };
         [SerializeField, Range(0, 0.6f)] private float knockbackDistance = 0.3f;
+        [SerializeField] private bool randomizeSeedEachRun = true;
+        [SerializeField] private int fixedSeed = 12345;
+        private int seedCounter;
         private bool wallTest, trapTest;
         private CombatSimulation simulation;
         private Sprite square;
@@ -72,11 +75,12 @@ namespace EnhancementTower.Presentation
                     strong ? 1.05f : 1.4f, 0.85f, strong ? 0.5f : 0.3f, strong ? 0.9f : 0.7f, threatWeight: threat);
                 monsterViews[i] = MakeActor($"Monster {i + 1}", strong ? new Color(0.7f, 0.35f, 0.85f) : new Color(0.95f, 0.4f, 0.3f));
             }
+            int seed = randomizeSeedEachRun ? unchecked((int)System.DateTime.UtcNow.Ticks ^ (++seedCounter * 16777619)) : fixedSeed;
             simulation = new CombatSimulation(
                 new Fighter(new Point(playerStart.x, playerStart.y), heroHealth, heroDamage, 1.9f, 0.85f),
                 monsters, comboDefinition != null ? comboDefinition.Snapshot() : AttackStep.DefaultCombo(),
                 new RepositionSettings(enableReposition, pressureThreshold, repositionDistance, repositionCooldown, retreatDistance), trapTest ? 0 : knockbackDistance,
-                tacticsDefinition != null ? tacticsDefinition.Snapshot() : new TacticalSettings());
+                tacticsDefinition != null ? tacticsDefinition.Snapshot() : new TacticalSettings(movementTemperature: 0.35f, targetTemperature: 0.55f), seed);
         }
         private SpriteRenderer MakeSprite(string label, Transform parent, Vector3 position, Vector2 size, Color color, int order)
         {
@@ -156,6 +160,9 @@ namespace EnhancementTower.Presentation
             GUI.Label(new Rect(12, 94, 500, 30), $"Rear limit {simulation.RetreatFloor:F2} | Hero Y {simulation.Hero.Position.Y:F2}");
             GUI.Label(new Rect(12, 278, 500, 30), $"Attack: {simulation.Hero.CurrentAttack.Kind} | Combo slot: {simulation.Hero.ComboIndex + 1}");
             GUI.Label(new Rect(12, 308, 500, 30), $"Blocked {simulation.BlockedSeconds:F1}s | Breakthroughs {simulation.Breakthroughs} | CD {simulation.BreakthroughCooldown:F1}s");
+            GUI.Label(new Rect(12, 388, 500, 30), $"Seed {simulation.Seed} | Move choices {simulation.MovementChoices} | Target choices {simulation.TargetChoices}");
+            bool randomSeed = GUI.Toggle(new Rect(12, 350, 250, 30), randomizeSeedEachRun, "New seed each restart");
+            if (randomSeed != randomizeSeedEachRun) { randomizeSeedEachRun = randomSeed; Restart(); }
             float targetDistance = simulation.Hero.Target == null ? 0 :
                 (simulation.Hero.Target.Position - simulation.Hero.Position).Length;
             GUI.Label(new Rect(12, 248, 500, 30), $"Hero attacks {simulation.Hero.Attacks} | Target distance {targetDistance:F3}");
