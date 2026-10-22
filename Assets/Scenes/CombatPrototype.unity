@@ -148,17 +148,32 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9f1d46eaed1254401b0e7b95a9eb0179, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnhancementTower.Presentation.CombatPrototype
-  heroHealth: 240
+  heroHealth: 1000
   monsterHealth: 60
-  heroDamage: 12
+  heroDamage: 30
   monsterDamage: 6
   heroStart: {x: -0.7, y: -1.8}
   monsterStart: {x: 0.8, y: 1.8}
-  tacticsDefinition: {fileID: 11400000, guid: 47d174713867d479f89395583ddf7474, type: 2}
+  monsterCount: 5
   comboDefinition: {fileID: 11400000, guid: c04377f66e74442f99eabca8c8ca7242, type: 2}
   damageDefinition: {fileID: 11400000, guid: 5a2186c30554e433d870611316ac419d, type: 2}
+  tacticsDefinition: {fileID: 11400000, guid: 47d174713867d479f89395583ddf7474, type: 2}
   fastMonsterDefinition: {fileID: 11400000, guid: 4e71bb3ae1e8f4e5899caf67d98dd044, type: 2}
+  includeFastMonsters: 1
   stageDefinition: {fileID: 11400000, guid: 71a9b28c133b64802a315dedeaf572a9, type: 2}
+  enableReposition: 1
+  pressureThreshold: 3
+  repositionDistance: 0.6
+  repositionCooldown: 2.5
+  retreatDistance: 0.8
+  knockbackDistance: 0.3
+  randomizeSeedEachRun: 1
+  fixedSeed: 12345
+  showHitEffects: 1
+  showDamageNumbers: 1
+  playCombatSounds: 1
+  showAttackArea: 0
+  combatVolume: 0.18
 --- !u!4 &505755048
 Transform:
   m_ObjectHideFlags: 0
