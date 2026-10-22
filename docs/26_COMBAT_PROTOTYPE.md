@@ -167,3 +167,7 @@
 - Unity 확인: Play → Charge boss → 평타와 돌진 사이 압박, 돌진 직후 공격 기회, 돌아서 휩쓸기 및 주황 전방 범위를 확인한다. HP절반 아래 ENRAGED와 준비속도 변화를 확인하고, 고정 시드 Restart/5 foes/Stage run 복귀도 확인한다.9:16/9:19.5에서 예고와 HUD 가독성을 확인한다.
 - 검증: 임시 .NET10 NUnit 실행기에서 **84/84 통과**. 기존 회귀, 휩쓸기 방향 고정/동작당1회/후방·범위 밖 제외, 절반 HP 템포,3개 시드의30초 평타·반복 돌진·휩쓸기·반격 기회·발 충돌·후퇴 한계를 포함한다. Unity6000.6.4f1 엔진 참조로 전투/표현/데이터 C# 컴파일 통과. Unity Editor 컴파일/Unity Test Runner/Play Mode/모바일 성능/macOS는 미검증이며 .NET 결과를 Unity 테스트 통과로 간주하지 않는다.
 - 다음 최소 단계: 실제 화면에서 예고/휩쓸기·피격 체감과 생존 시간을 확인하고 수치를 조절한다. 보스 한 판 제한 시간/종료 연결은 이후 작업이다.
+
+### 보스 테스트 어셈블리 컴파일 오류 수정
+- HalfHealthChangesTempoWithoutChangingChargeGeometry가 internal setter인 Fighter.Health를 테스트 어셈블리에서 직접 변경해 Unity CS0200이 발생했다. 실제 전투의 첫 적중으로 HP절반 이하를 만든 뒤 템포를 비교하도록 수정했다. 프로덕션 Health 접근 권한은 변경하지 않았다.
+- 이전 .NET84개 검증은 전투와 테스트를 단일 어셈블리로 묶어 접근 제한을 놓쳤다. 이번에는 전투를 별도 EnhancementTower.Combat 어셈블리로 빌드하고 테스트에서 참조하여84/84 통과했다. 또한 Unity6000.6.4f1 내장 Roslyn과 현재 프로젝트의 Bee Tests.rsp/rsp2(출력만 임시 폴더로 변경)로 테스트 어셈블리 컴파일 exit0을 확인했다. Editor 자동 재컴파일 완료와 Play Mode는 별도 확인이 필요하다.

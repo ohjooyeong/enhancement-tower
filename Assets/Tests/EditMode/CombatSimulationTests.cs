@@ -102,8 +102,18 @@ public class CombatSimulationTests
     [Test]
     public void HalfHealthChangesTempoWithoutChangingChargeGeometry()
     {
-        var normal = BossBattle(0); var enraged = BossBattle(0);
-        enraged.Monster.Health = enraged.Monster.MaxHealth / 2;
+        CombatSimulation Prepare(bool lowerHealth)
+        {
+            var battle = new CombatSimulation(
+                new Fighter(new Point(0, 1.3f), 10000, lowerHealth ? 6000 : 1, 0, 0.85f),
+                new Fighter(new Point(0, 2), 10000, 6, 0, 0.85f));
+            battle.EnableChargeBoss(battle.Monster);
+            for (int i = 0; i < 120 && battle.Monster.HitsTaken == 0; i++) battle.Advance(CombatSimulation.Tick);
+            Assert.AreEqual(1, battle.Monster.HitsTaken);
+            battle.Hero.Position = new Point(0, -1);
+            return battle;
+        }
+        var normal = Prepare(false); var enraged = Prepare(true);
         Assert.IsTrue(enraged.BossEnraged);
         int normalWarning = 0, fastWarning = 0;
         for (int i = 0; i < 400; i++)
