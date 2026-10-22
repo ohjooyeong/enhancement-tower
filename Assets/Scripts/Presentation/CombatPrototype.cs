@@ -23,6 +23,7 @@ namespace EnhancementTower.Presentation
             new Vector2(0.95f, 1.75f), new Vector2(-0.65f, 0.55f), new Vector2(-2.4f, 1.9f),
             new Vector2(0.3f, 0.4f), new Vector2(-1.15f, 2.05f), new Vector2(-1.9f, -0.1f)
         };
+        private bool wallTest;
         private CombatSimulation simulation;
         private Sprite square;
         private Texture2D texture;
@@ -51,19 +52,21 @@ namespace EnhancementTower.Presentation
         {
             if (monsterViews != null)
                 for (int i = 0; i < monsterViews.Length; i++) Destroy(monsterViews[i].Root.gameObject);
-            int count = Mathf.Clamp(monsterCount, 1, 12);
+            int count = wallTest ? 3 : Mathf.Clamp(monsterCount, 1, 12);
+            Vector2 playerStart = wallTest ? new Vector2(-2, -2) : heroStart;
             monsterViews = new ActorView[count];
             var monsters = new Fighter[count];
             for (int i = 0; i < count; i++)
             {
                 // Authored scattered entry points, not movement lanes.
-                Vector2 start = monsterStart + EntryOffsets[i];
+                Vector2 start = wallTest ? (i == 0 ? new Vector2(-2, -1.35f) :
+                    i == 1 ? new Vector2(-1.4f, -1.9f) : new Vector2(-1.4f, -1.35f)) : monsterStart + EntryOffsets[i];
                 start.x = Mathf.Clamp(start.x, -2, 2); start.y = Mathf.Clamp(start.y, -3, 4);
                 monsters[i] = new Fighter(new Point(start.x, start.y), monsterHealth, monsterDamage, 1.4f, 0.85f, 0.3f, 0.7f);
                 monsterViews[i] = MakeActor($"Monster {i + 1}", new Color(0.95f, 0.4f, 0.3f));
             }
             simulation = new CombatSimulation(
-                new Fighter(new Point(heroStart.x, heroStart.y), heroHealth, heroDamage, 1.9f, 0.85f),
+                new Fighter(new Point(playerStart.x, playerStart.y), heroHealth, heroDamage, 1.9f, 0.85f),
                 monsters, cleaveMultiplier, maxSecondaryHits,
                 new RepositionSettings(enableReposition, pressureThreshold, repositionDistance, repositionCooldown, retreatDistance));
         }
@@ -134,9 +137,10 @@ namespace EnhancementTower.Presentation
             GUI.Label(new Rect(12, 68, 500, 30), $"Pressure {simulation.Pressure} | Repositions {simulation.Repositions} | CD {simulation.RepositionCooldown:F1}s");
             GUI.Label(new Rect(12, 94, 500, 30), $"Rear limit {simulation.RetreatFloor:F2} | Hero Y {simulation.Hero.Position.Y:F2}");
             if (GUI.Button(new Rect(12, 128, 100, 38), "Restart")) Restart();
-            if (GUI.Button(new Rect(118, 128, 70, 38), "5 foes")) { monsterCount = 5; Restart(); }
-            if (GUI.Button(new Rect(194, 128, 70, 38), "8 foes")) { monsterCount = 8; Restart(); }
-            if (GUI.Button(new Rect(270, 128, 70, 38), "12 foes")) { monsterCount = 12; Restart(); }
+            if (GUI.Button(new Rect(118, 128, 70, 38), "5 foes")) { wallTest = false; monsterCount = 5; Restart(); }
+            if (GUI.Button(new Rect(194, 128, 70, 38), "8 foes")) { wallTest = false; monsterCount = 8; Restart(); }
+            if (GUI.Button(new Rect(270, 128, 70, 38), "12 foes")) { wallTest = false; monsterCount = 12; Restart(); }
+            if (GUI.Button(new Rect(270, 176, 90, 30), "Wall test")) { wallTest = true; Restart(); }
             bool reposition = GUI.Toggle(new Rect(12, 176, 260, 30), enableReposition, "Pressure reposition");
             if (reposition != enableReposition) { enableReposition = reposition; Restart(); }
         }

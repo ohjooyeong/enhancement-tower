@@ -83,7 +83,8 @@ namespace EnhancementTower.Combat
         public float RepositionCooldown { get; private set; }
         public float RepositionTravel { get; private set; }
         private bool repositioning;
-        private Point repositionGoal;
+        private Point repositionGoal, repositionNext;
+        private bool hasRepositionNext;
         public CombatSimulation(Fighter hero, params Fighter[] monsters) : this(hero, monsters, 0.35f, 3) { }
         public CombatSimulation(Fighter hero, Fighter[] monsters, float cleaveMultiplier, int maxSecondaryHits, RepositionSettings reposition = null)
         {
@@ -214,8 +215,10 @@ namespace EnhancementTower.Combat
                     float travelled = (actor.Position - beforeStep).Length;
                     RepositionTravel += travelled;
                     actor.Movement = (actor.Position - beforeStep) * (1f / Tick);
-                    if (travelled < 0.0001f || (repositionGoal - actor.Position).Length < 0.001f)
-                    { repositioning = false; actor.State = CombatState.Search; }
+                    if ((repositionGoal - actor.Position).Length < 0.001f && hasRepositionNext)
+                    { repositionGoal = repositionNext; hasRepositionNext = false; }
+                    else if (travelled < 0.0001f || (repositionGoal - actor.Position).Length < 0.001f)
+                    { repositioning = false; hasRepositionNext = false; actor.State = CombatState.Search; }
                     break;
             }
         }
@@ -277,25 +280,58 @@ namespace EnhancementTower.Combat
         {
             if (!RepositionRules.Enabled || Hero.Speed <= 0 || RepositionCooldown > 0 ||
                 Pressure < RepositionRules.PressureThreshold) return false;
-            Point side = new Point(Hero.Aim.Y, -Hero.Aim.X);
-            float best = Crowding(Hero.Position) - 0.05f;
+            float best = EscapeScore(Hero.Position) - 0.05f;
             bool found = false;
-            // Relative side steps and short diagonals; no forced position swap or dodge immunity.
-            for (int i = 0; i < 4; i++)
+            hasRepositionNext = false;
+            // Sample free headings, not lanes. Try straight and bounded two-leg routes.
+            for (int i = 0; i < 16; i++)
             {
-                Point direction = side * (i % 2 == 0 ? 1 : -1);
-                if (i >= 2) direction = (direction + new Point(0, -0.5f)).Normalized;
-                Point candidate = Clamp(Hero.Position + direction * RepositionRules.Distance);
-                candidate.Y = Math.Max(RetreatFloor, candidate.Y);
-                Point reachable = MoveWithoutCrossing(Hero, candidate);
-                if ((reachable - Hero.Position).Length < RepositionRules.Distance * 0.6f) continue;
-                float score = Crowding(reachable);
-                if (score >= best) continue;
-                best = score; repositionGoal = reachable; found = true;
+                Point direction = Heading(i);
+                Point direct = ReachableStep(Hero.Position, direction, RepositionRules.Distance);
+                if ((direct - Hero.Position).Length >= RepositionRules.Distance * 0.6f)
+                {
+                    float score = EscapeScore(direct);
+                    if (score < best)
+                    { best = score; repositionGoal = direct; hasRepositionNext = false; found = true; }
+                }
+                float half = RepositionRules.Distance * 0.5f;
+                Point corner = ReachableStep(Hero.Position, direction, half);
+                if ((corner - Hero.Position).Length < half * 0.8f) continue;
+                for (int j = 0; j < 16; j++)
+                {
+                    Point end = ReachableStep(corner, Heading(j), half);
+                    if ((end - corner).Length < half * 0.8f) continue;
+                    float score = EscapeScore(end) + 0.015f; // Prefer straight routes when equally useful.
+                    if (score >= best) continue;
+                    best = score; repositionGoal = corner; repositionNext = end;
+                    hasRepositionNext = true; found = true;
+                }
             }
             if (!found) return false; // Hold ground and attack if no useful space exists.
             repositioning = true; Repositions++; RepositionCooldown = RepositionRules.Cooldown;
             return true;
+        }
+        private static Point Heading(int index)
+        {
+            double angle = index * Math.PI / 8;
+            return new Point((float)Math.Cos(angle), (float)Math.Sin(angle));
+        }
+        private float EscapeScore(Point position)
+        {
+            float wall = Math.Max(0, 0.6f - (2 - Math.Abs(position.X)));
+            float rear = Math.Max(0, 0.6f - (position.Y - RetreatFloor));
+            float front = Math.Max(0, 0.6f - (4 - position.Y));
+            return Crowding(position) + 0.6f * (wall * wall + rear * rear + front * front);
+        }
+        private Point ReachableStep(Point start, Point direction, float distance)
+        {
+            Point destination = Clamp(start + direction * distance);
+            destination.Y = Math.Max(RetreatFloor, destination.Y);
+            Point motion = destination - start;
+            float fraction = 1;
+            for (int i = 0; i < enemies.Length; i++)
+                if (enemies[i].Alive) fraction = Math.Min(fraction, SafeFraction(start, motion, enemies[i].Position));
+            return start + motion * fraction;
         }
         private static void DealHit(Fighter attacker, Fighter target, int rawDamage)
         {

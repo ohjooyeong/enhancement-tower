@@ -284,4 +284,29 @@ public class CombatSimulationTests
         battle.Advance(0.3);
         Assert.Less((a.Position - settled).Length, 0.001f);
     }
+    [TestCase(-2f)]
+    [TestCase(2f)]
+    public void WallCrowdUsesOpenRouteAndResumesAttacking(float wallX)
+    {
+        float inward = wallX < 0 ? 1 : -1;
+        var hero = new Fighter(new Point(wallX, -2), 5000, 1, 1.9f, 0.85f);
+        var enemies = new[] {
+            new Fighter(new Point(wallX, -1.35f), 5000, 1, 0, 0.85f),
+            new Fighter(new Point(wallX + inward * 0.6f, -1.9f), 5000, 1, 0, 0.85f),
+            new Fighter(new Point(wallX + inward * 0.6f, -1.35f), 5000, 1, 0, 0.85f) };
+        var battle = new CombatSimulation(hero, enemies);
+        bool moved = false;
+        for (int tick = 0; tick < 600; tick++)
+        {
+            battle.Advance(CombatSimulation.Tick);
+            moved |= (hero.Position - new Point(wallX, -2)).Length > 0.2f;
+            Assert.That(hero.Position.X, Is.InRange(-2, 2));
+            Assert.GreaterOrEqual(hero.Position.Y, battle.RetreatFloor - 0.0001f);
+            foreach (var enemy in enemies) Assert.GreaterOrEqual((hero.Position - enemy.Position).Length, 0.5599f);
+        }
+        Assert.IsTrue(moved, "An open wall-side route must be used.");
+        Assert.Greater(battle.Repositions, 0);
+        Assert.Greater(hero.Attacks, 5);
+        Assert.LessOrEqual(battle.RepositionTravel, battle.Repositions * 0.5001f);
+    }
 }
