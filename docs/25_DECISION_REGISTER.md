@@ -1,10 +1,11 @@
-# Decision register (current, 2026-10-21)
+# Decision register (current, 2026-10-22)
 
 ## LOCKED DIRECTION (design-level; prototype validation still required)
 - Portrait-mobile-first 2D handcrafted pixel-art, forward-looking quarter-view, camera orientation static (position can track modestly).
 - Lane-free autonomous movement in bounded area; primary monster arrival from ahead, not omnidirectional bullet-hell. Neither tower game mode has manual player movement.
 - **Boss uses same camera/movement/targeting core**; adds warnings, side-step, charge, turn-around and recovery. Passing positions is permitted naturally, not scripted swap. Four-direction visual fallback can be prototyped; animation quality needs review.
-- Primary slash front-diagonal; cleave facing-dependent wide forward arc, around 180° candidate. Lunge is not guaranteed basic combo.
+- 2026-10-22 USER-APPROVED: replace primary-target + reduced splash with attack-specific direct multi-target swings. Slashes select up to 3 nearest enemies in the hero's forward geometry with equal base damage; thrust selects 1 in a narrow forward shape with higher damage. No random victim selection. Each enemy can be hit once per swing, with a shared total target budget across the active window. Attack variants have different timing, shape, damage, knockback and presentation. No mandatory body lunge.
+- Prototype combo order (diagonal slash → reverse slash → thrust), angles, damage multipliers and timings remain tunable assumptions, not a locked three-hit roster for every weapon.
 - Monster-monster mild overlap; monster-player foot center separation; no endless backward kite; at retreat limit re-engage and fight.
 - Intro: initial Challenge entry may briefly establish hero location and enemies. User toggle to disable + skip, no full 50 enemy objects in advance; persistent Farming omits recurring intro. Visual ahead silhouettes are optional enhancement; gradual spawns are first implementation.
 - Challenge finite; Farming endless + offline settlement; Rage manual Farming-only; same art/scene logic with different flow rules.
@@ -25,6 +26,7 @@
 - Whether telegraph avoidance uses explicit reaction probability; favor physics/geometric safe spot plus movement constraints, not arbitrary perfect dodge.
 
 ## LEGACY CONFLICT RESOLUTION
+- The old 100% primary / 35% nearby cleave examples are superseded by the user-approved per-swing direct multi-target design above. Historical progress notes are not current attack rules.
 - Historic central-fixed prototype suggestions are **superseded** by lane-free movement.
 - Historic fixed three-lane suggestions are **rejected**, not superseding free movement.
 - Any older suggestion that the hero must always show their back is **rejected**; turn to target without rotating camera.

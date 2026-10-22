@@ -17,6 +17,31 @@ namespace EnhancementTower.Combat
         public static Point operator *(Point a, float b) => new Point(a.X * b, a.Y * b);
     }
 
+    public enum AttackKind { DiagonalSlash, ReverseSlash, Thrust, MonsterStrike }
+
+    public readonly struct AttackStep
+    {
+        public readonly AttackKind Kind;
+        public readonly int MaxTargets;
+        public readonly float Windup, Active, Recovery, Arc, RangeScale, DamageScale, KnockbackScale;
+        public float Duration => Windup + Active + Recovery;
+        public AttackStep(AttackKind kind, int maxTargets, float windup, float active, float recovery,
+            float arc, float rangeScale, float damageScale, float knockbackScale)
+        {
+            if (maxTargets < 1 || windup <= 0 || active <= 0 || recovery < 0 || arc <= 0 || arc > 180 ||
+                rangeScale <= 0 || damageScale <= 0 || knockbackScale < 0 ||
+                float.IsNaN(windup + active + recovery + arc + rangeScale + damageScale + knockbackScale) ||
+                float.IsInfinity(windup + active + recovery + arc + rangeScale + damageScale + knockbackScale))
+                throw new ArgumentOutOfRangeException(nameof(windup));
+            Kind = kind; MaxTargets = maxTargets; Windup = windup; Active = active; Recovery = recovery;
+            Arc = arc; RangeScale = rangeScale; DamageScale = damageScale; KnockbackScale = knockbackScale;
+        }
+        public static AttackStep[] DefaultCombo(float windup = 0.22f, float recovery = 0.68f) => new[] {
+            new AttackStep(AttackKind.DiagonalSlash, 3, windup, recovery * 0.18f, recovery * 0.82f, 180, 1, 1, 0.65f),
+            new AttackStep(AttackKind.ReverseSlash, 3, windup * 0.82f, recovery * 0.2f, recovery * 0.8f, 160, 1, 1, 0.8f),
+            new AttackStep(AttackKind.Thrust, 1, windup * 1.4f, recovery * 0.15f, recovery * 1.05f, 24, 1.25f, 1.8f, 1.3f) };
+    }
+
     public sealed class Fighter
     {
         public Point Position, Movement, Aim = new Point(0, 1), AttackAim;
@@ -24,11 +49,15 @@ namespace EnhancementTower.Combat
         public readonly int MaxHealth, Damage, Defense;
         public Fighter Target { get; internal set; }
         internal Fighter AttackTarget;
+        public AttackStep CurrentAttack { get; internal set; }
+        public int ComboIndex { get; internal set; }
         public int LastHitCount { get; internal set; }
         public int Health { get; internal set; }
         public readonly float Speed, Range, Windup, Recovery;
         public float PhaseTime { get; internal set; }
         public float HitFlash { get; internal set; }
+        public Point HitDirection { get; internal set; }
+        public AttackKind LastHitKind { get; internal set; }
         public float SlashTime { get; internal set; }
         public int Attacks { get; internal set; }
         public float KnockbackRemaining { get; internal set; }
@@ -72,8 +101,8 @@ namespace EnhancementTower.Combat
         public Fighter Monster => enemies[0];
         private readonly Fighter[] enemies;
         public IReadOnlyList<Fighter> Monsters { get; }
-        public readonly float CleaveMultiplier;
-        public readonly int MaxSecondaryHits;
+        private readonly AttackStep[] combo;
+        private readonly int[] hitOnSwing;
         public readonly float KnockbackDistance;
         public int LivingMonsters
         {
@@ -90,12 +119,15 @@ namespace EnhancementTower.Combat
         private bool repositioning;
         private Point repositionGoal, repositionNext;
         private bool hasRepositionNext;
-        public CombatSimulation(Fighter hero, params Fighter[] monsters) : this(hero, monsters, 0.35f, 3) { }
-        public CombatSimulation(Fighter hero, Fighter[] monsters, float cleaveMultiplier, int maxSecondaryHits, RepositionSettings reposition = null, float knockbackDistance = 0)
+        public CombatSimulation(Fighter hero, params Fighter[] monsters) : this(hero, monsters, null) { }
+        public CombatSimulation(Fighter hero, Fighter[] monsters, AttackStep[] attacks, RepositionSettings reposition = null, float knockbackDistance = 0)
         {
             if (hero == null || monsters == null || monsters.Length == 0) throw new ArgumentException("A hero and enemies are required.");
-            if (float.IsNaN(cleaveMultiplier) || cleaveMultiplier < 0 || cleaveMultiplier > 1 || maxSecondaryHits < 0)
-                throw new ArgumentOutOfRangeException(nameof(cleaveMultiplier));
+            combo = attacks == null ? AttackStep.DefaultCombo(hero.Windup, hero.Recovery) : (AttackStep[])attacks.Clone();
+            if (combo.Length == 0) throw new ArgumentException("Combo cannot be empty.");
+            for (int i = 0; i < combo.Length; i++)
+                if (combo[i].MaxTargets < 1 || combo[i].Active <= 0) throw new ArgumentException("Invalid combo step.");
+            hitOnSwing = new int[monsters.Length];
             if (float.IsNaN(knockbackDistance) || float.IsInfinity(knockbackDistance) || knockbackDistance < 0 || knockbackDistance > 0.6f)
                 throw new ArgumentOutOfRangeException(nameof(knockbackDistance));
             KnockbackDistance = knockbackDistance;
@@ -108,7 +140,7 @@ namespace EnhancementTower.Combat
                 for (int j = 0; j < i; j++) if (enemies[j] == enemies[i]) throw new ArgumentException("Duplicate enemy.");
             }
             Monsters = Array.AsReadOnly(enemies);
-            CleaveMultiplier = cleaveMultiplier; MaxSecondaryHits = maxSecondaryHits;
+
         }
         private Fighter SelectTarget(Fighter actor)
         {
@@ -151,14 +183,15 @@ namespace EnhancementTower.Combat
                 actor.Target = SelectTarget(actor);
             Fighter target = actor.Target;
             if (target == null) { actor.State = CombatState.Search; if (actor == Hero) repositioning = false; return; }
+            float approachRange = actor == Hero ? actor.Range * combo[actor.ComboIndex].RangeScale : actor.Range;
             // A moving crowd can put another enemy between the hero and its retained target.
             // Reconsider only while approaching an out-of-range target; never cancel an attack.
             if (actor == Hero && actor.State == CombatState.Approach &&
-                !WithinRange(actor.Position, target.Position, actor.Range))
+                !WithinRange(actor.Position, target.Position, approachRange))
             {
                 Fighter nearest = SelectTarget(actor);
                 if (nearest != null && nearest != target &&
-                    (WithinRange(actor.Position, nearest.Position, actor.Range) ||
+                    (WithinRange(actor.Position, nearest.Position, approachRange) ||
                     (nearest.Position - actor.Position).Length + 0.05f < (target.Position - actor.Position).Length))
                     actor.Target = target = nearest;
             }
@@ -168,15 +201,17 @@ namespace EnhancementTower.Combat
             {
                 case CombatState.Search: actor.State = CombatState.Approach; break;
                 case CombatState.Approach:
-                    if (WithinRange(actor.Position, target.Position, actor.Range))
+                    if (WithinRange(actor.Position, target.Position, approachRange))
                     {
                         actor.State = CombatState.Attack; actor.AttackAim = actor.Aim;
-                        actor.PhaseTime = 0; actor.AttackTarget = target;
+                        actor.PhaseTime = 0; actor.AttackTarget = target; actor.LastHitCount = 0;
+                        actor.CurrentAttack = actor == Hero ? combo[actor.ComboIndex] :
+                            new AttackStep(AttackKind.MonsterStrike, 1, actor.Windup, 0.01f, Math.Max(0, actor.Recovery - 0.01f), 180, 1, 1, 0);
                     }
                     else
                     {
                         if (actor.KnockbackRemaining > 0) break;
-                        float distance = Math.Min(actor.Speed * Tick, delta.Length - (actor.Range - 0.005f));
+                        float distance = Math.Min(actor.Speed * Tick, delta.Length - (approachRange - 0.005f));
                         distance = Math.Min(distance, Math.Max(0, delta.Length - FootRadius * 2));
                         Point before = actor.Position;
                         Point direction = actor.Aim;
@@ -204,28 +239,20 @@ namespace EnhancementTower.Combat
                 case CombatState.Attack:
                     float previous = actor.PhaseTime;
                     actor.PhaseTime += Tick;
-                    if (previous < actor.Windup && actor.PhaseTime >= actor.Windup)
+                    AttackStep step = actor.CurrentAttack;
+                    if (previous < step.Windup && actor.PhaseTime >= step.Windup)
                     {
-                        actor.Attacks++; actor.SlashTime = 0.16f;
-                        actor.LastHitCount = 0;
-                        Fighter primary = actor.AttackTarget;
-                        if (primary != null && primary.Alive && InArc(actor.Position, actor.AttackAim, primary.Position, actor.Range, 180))
-                            DealHit(actor, primary, actor.Damage);
-                        if (actor == Hero)
-                        {
-                            int secondaryHits = 0;
-                            for (int i = 0; i < enemies.Length && secondaryHits < MaxSecondaryHits; i++)
-                            {
-                                Fighter other = enemies[i];
-                                if (other == primary || !other.Alive || CleaveMultiplier <= 0) continue;
-                                if (!InArc(actor.Position, actor.AttackAim, other.Position, actor.Range, 180)) continue;
-                                DealHit(actor, other, Math.Max(1, (int)Math.Round(actor.Damage * CleaveMultiplier, MidpointRounding.AwayFromZero)));
-                                secondaryHits++;
-                            }
-                        }
+                        actor.Attacks++; actor.SlashTime = step.Active;
+                        if (actor != Hero && target.Alive && InArc(actor.Position, actor.AttackAim, target.Position, actor.Range, 180))
+                            DealHit(actor, target, actor.Damage);
                     }
-                    if (actor.PhaseTime >= actor.Windup + actor.Recovery)
+                    if (actor == Hero && actor.PhaseTime >= step.Windup && previous < step.Windup + step.Active)
+                        ResolveSwing(step);
+                    if (actor.PhaseTime >= step.Duration)
+                    {
+                        if (actor == Hero) actor.ComboIndex = (actor.ComboIndex + 1) % combo.Length;
                         actor.State = CombatState.Reposition;
+                    }
                     break;
                 case CombatState.Reposition:
                     if (actor != Hero || (!repositioning && !TryStartReposition()))
@@ -242,6 +269,25 @@ namespace EnhancementTower.Combat
                     else if (travelled < 0.0001f || (repositionGoal - actor.Position).Length < 0.001f)
                     { repositioning = false; hasRepositionNext = false; actor.State = CombatState.Search; }
                     break;
+            }
+        }
+        private void ResolveSwing(AttackStep step)
+        {
+            while (Hero.LastHitCount < step.MaxTargets)
+            {
+                int best = -1; float distance = float.MaxValue;
+                for (int i = 0; i < enemies.Length; i++)
+                {
+                    Fighter candidate = enemies[i];
+                    if (!candidate.Alive || hitOnSwing[i] == Hero.Attacks ||
+                        !InArc(Hero.Position, Hero.AttackAim, candidate.Position, Hero.Range * step.RangeScale, step.Arc)) continue;
+                    float current = (candidate.Position - Hero.Position).Length;
+                    if (current < distance) { best = i; distance = current; }
+                }
+                if (best < 0) break;
+                hitOnSwing[best] = Hero.Attacks;
+                int damage = Math.Max(1, (int)Math.Round(Hero.Damage * step.DamageScale, MidpointRounding.AwayFromZero));
+                DealHit(Hero, enemies[best], damage);
             }
         }
         // Soft local relaxation also runs while attacking: stopping must not freeze a pile-up.
@@ -358,11 +404,14 @@ namespace EnhancementTower.Combat
         private void DealHit(Fighter attacker, Fighter target, int rawDamage)
         {
             target.Health = Math.Max(0, target.Health - Math.Max(1, rawDamage - target.Defense));
-            target.HitFlash = 0.14f; attacker.LastHitCount++;
+            target.LastHitKind = attacker.CurrentAttack.Kind;
+            target.HitDirection = (target.Position - attacker.Position).Normalized;
+            target.HitFlash = target.LastHitKind == AttackKind.Thrust ? 0.2f : 0.14f;
+            attacker.LastHitCount++;
             if (attacker == Hero && target.Alive && KnockbackDistance > 0 && target.KnockbackCooldown <= 0)
             {
                 target.KnockbackDirection = (target.Position - attacker.Position).Normalized;
-                target.KnockbackRemaining = KnockbackDistance;
+                target.KnockbackRemaining = Math.Min(0.6f, KnockbackDistance * attacker.CurrentAttack.KnockbackScale);
                 target.KnockbackCooldown = 0.75f;
             }
             if (!target.Alive) { target.KnockbackRemaining = 0; target.State = CombatState.Dead; target.Movement = new Point(); target.Target = null; }

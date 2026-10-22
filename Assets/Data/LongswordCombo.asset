@@ -1,0 +1,42 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6d4f624cf52cd492d87c663f39b0c822, type: 3}
+  m_Name: LongswordCombo
+  m_EditorClassIdentifier: Assembly-CSharp::EnhancementTower.Data.ComboDefinition
+  steps:
+  - kind: 0
+    maxTargets: 3
+    windup: 0.22
+    active: 0.12
+    recovery: 0.56
+    arc: 180
+    rangeScale: 1
+    damageScale: 1
+    knockbackScale: 0.65
+  - kind: 1
+    maxTargets: 3
+    windup: 0.18
+    active: 0.14
+    recovery: 0.54
+    arc: 160
+    rangeScale: 1
+    damageScale: 1
+    knockbackScale: 0.8
+  - kind: 2
+    maxTargets: 1
+    windup: 0.3
+    active: 0.1
+    recovery: 0.72
+    arc: 24
+    rangeScale: 1.25
+    damageScale: 1.8
+    knockbackScale: 1.3

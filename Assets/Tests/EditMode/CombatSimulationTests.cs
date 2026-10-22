@@ -52,7 +52,7 @@ public class CombatSimulationTests
         Assert.Greater(battle.Hero.Aim.Y, 0);
     }
     [Test]
-    public void CleaveHitsFrontWithIndividualDefenseButNotBehindOrOutOfRange()
+    public void SlashHitsFrontEquallyWithIndividualDefenseButNotBehindOrOutOfRange()
     {
         var hero = new Fighter(new Point(), 1000, 20, 0, 1.2f);
         var primary = new Fighter(new Point(0, 0.65f), 100, 1, 0, 0.6f);
@@ -63,22 +63,22 @@ public class CombatSimulationTests
         battle.Advance(0.4);
         Assert.AreSame(primary, hero.Target);
         Assert.AreEqual(80, primary.Health);
-        Assert.AreEqual(96, side.Health);
+        Assert.AreEqual(83, side.Health);
         Assert.AreEqual(100, behind.Health);
         Assert.AreEqual(100, far.Health);
         Assert.AreEqual(2, hero.LastHitCount);
     }
     [Test]
-    public void CleaveRespectsSecondaryLimitAndDoesNotRepeatDuringRecovery()
+    public void SlashRespectsTotalLimitAndDoesNotRepeatDuringRecovery()
     {
         var hero = new Fighter(new Point(), 1000, 20, 0, 1.2f);
         var a = new Fighter(new Point(0, 0.6f), 100, 1, 0, 0.6f);
         var b = new Fighter(new Point(-0.5f, 0.5f), 100, 1, 0, 0.6f);
         var c = new Fighter(new Point(0.5f, 0.5f), 100, 1, 0, 0.6f);
-        var battle = new CombatSimulation(hero, new[] { a, b, c }, 0.35f, 1);
+        var battle = new CombatSimulation(hero, new[] { a, b, c }, new[] { new AttackStep(AttackKind.DiagonalSlash, 2, 0.22f, 0.12f, 0.56f, 180, 1, 1, 0.65f) });
         battle.Advance(0.7);
         Assert.AreEqual(80, a.Health);
-        Assert.AreEqual(93, b.Health);
+        Assert.AreEqual(80, b.Health);
         Assert.AreEqual(100, c.Health);
         Assert.AreEqual(1, hero.Attacks);
     }
@@ -147,7 +147,7 @@ public class CombatSimulationTests
             new Fighter(new Point(0, heroY + 0.7f), 5000, 1, 0, 0.85f),
             new Fighter(new Point(-0.5f, heroY + 0.5f), 5000, 1, 0, 0.85f),
             new Fighter(new Point(0.5f, heroY + 0.5f), 5000, 1, 0, 0.85f) };
-        return new CombatSimulation(hero, enemies, 0.35f, 3, new RepositionSettings(enabled, retreatDistance: retreat));
+        return new CombatSimulation(hero, enemies, null, new RepositionSettings(enabled, retreatDistance: retreat));
     }
     [Test]
     public void PressureStepsAreShortHaveCooldownAndReturnToAttacking()
@@ -366,7 +366,7 @@ public class CombatSimulationTests
         var front = new Fighter(new Point(0, 0.7f), 1000, 1, 0, 0.85f, 0.4f, 0.6f);
         var rear = new Fighter(new Point(0, 0.9f), 1000, 1, 0, 0.85f);
         var battle = new CombatSimulation(new Fighter(new Point(), 1000, 12, 0, 0.85f), new[] { front, rear },
-            0.35f, 3, knockbackDistance: 0.3f);
+            null, knockbackDistance: 0.5f);
         battle.Advance(0.7);
         Assert.Greater(front.Position.Y, rear.Position.Y, "Rear monster must not block knockback.");
         Assert.AreEqual(1, front.Attacks, "Knockback must not reset windup.");
@@ -379,13 +379,13 @@ public class CombatSimulationTests
     {
         var enemy = new Fighter(new Point(1.9f, 0), 1000, 1, 0, 0.85f);
         var battle = new CombatSimulation(new Fighter(new Point(1.2f, 0), 1000, 12, 0, 0.85f),
-            new[] { enemy }, 0.35f, 3, knockbackDistance: 0.3f);
+            new[] { enemy }, null, knockbackDistance: 0.3f);
         battle.Advance(0.6);
         Assert.That(enemy.Position.X, Is.EqualTo(2).Within(0.0001f));
         Assert.AreEqual(0, enemy.KnockbackRemaining);
         var dead = new Fighter(new Point(0, 0.7f), 1, 1, 0, 0.85f);
         var lethal = new CombatSimulation(new Fighter(new Point(), 1000, 12, 0, 0.85f), new[] { dead },
-            0.35f, 3, knockbackDistance: 0.3f);
+            null, knockbackDistance: 0.3f);
         lethal.Advance(1);
         Assert.IsFalse(dead.Alive);
         Assert.AreEqual(0.7f, dead.Position.Y);
@@ -396,8 +396,8 @@ public class CombatSimulationTests
         var originalA = Stress(12); var originalB = Stress(12);
         var enemiesA = new Fighter[12]; var enemiesB = new Fighter[12];
         for (int i = 0; i < 12; i++) { enemiesA[i] = originalA.Monsters[i]; enemiesB[i] = originalB.Monsters[i]; }
-        var a = new CombatSimulation(originalA.Hero, enemiesA, 0.35f, 3, knockbackDistance: 0.3f);
-        var b = new CombatSimulation(originalB.Hero, enemiesB, 0.35f, 3, knockbackDistance: 0.3f);
+        var a = new CombatSimulation(originalA.Hero, enemiesA, null, knockbackDistance: 0.3f);
+        var b = new CombatSimulation(originalB.Hero, enemiesB, null, knockbackDistance: 0.3f);
         for (int tick = 0; tick < 3600; tick++)
         {
             a.Advance(CombatSimulation.Tick);
@@ -423,11 +423,79 @@ public class CombatSimulationTests
     {
         var hero = new Fighter(new Point(), 5000, 1, 0, 2, 0.01f, 0.01f);
         var enemy = new Fighter(new Point(0, 0.7f), 5000, 1, 0, 0.85f);
-        var battle = new CombatSimulation(hero, new[] { enemy }, 0.35f, 3, knockbackDistance: 0.3f);
+        var battle = new CombatSimulation(hero, new[] { enemy }, null, knockbackDistance: 0.3f);
         battle.Advance(0.65);
         Assert.Greater(hero.Attacks, 3);
-        Assert.That(enemy.Position.Y, Is.EqualTo(1).Within(0.0001f));
+        Assert.That(enemy.Position.Y, Is.EqualTo(0.895f).Within(0.0001f));
         Assert.AreEqual(0, enemy.KnockbackRemaining);
         Assert.Greater(enemy.Attacks, 0);
+    }
+    [Test]
+    public void SlashSelectsNearestThreeRegardlessOfSpawnOrder()
+    {
+        var hero = new Fighter(new Point(), 5000, 20, 0, 1.2f);
+        var far = new Fighter(new Point(0, 1.1f), 1000, 1, 0, 0.6f);
+        var near = new Fighter(new Point(0, 0.6f), 1000, 1, 0, 0.6f);
+        var second = new Fighter(new Point(0.3f, 0.6f), 1000, 1, 0, 0.6f);
+        var third = new Fighter(new Point(-0.4f, 0.6f), 1000, 1, 0, 0.6f);
+        var battle = new CombatSimulation(hero, far, third, second, near);
+        battle.Advance(0.5);
+        Assert.AreEqual(1000, far.Health);
+        Assert.AreEqual(980, near.Health);
+        Assert.AreEqual(980, second.Health);
+        Assert.AreEqual(980, third.Health);
+        Assert.AreEqual(3, hero.LastHitCount);
+    }
+    [Test]
+    public void SwingAcceptsLateEntrantButNeverHitsSameEnemyTwice()
+    {
+        var hero = new Fighter(new Point(), 5000, 20, 0, 1.2f);
+        var first = new Fighter(new Point(0, 0.7f), 1000, 1, 0, 0.6f);
+        var entering = new Fighter(new Point(0, 2), 1000, 1, 0, 0.6f);
+        var battle = new CombatSimulation(hero, first, entering);
+        battle.Advance(0.28);
+        Assert.AreEqual(980, first.Health);
+        entering.Position = new Point(0.5f, 0.5f);
+        battle.Advance(0.1);
+        Assert.AreEqual(980, first.Health);
+        Assert.AreEqual(980, entering.Health);
+        battle.Advance(0.3);
+        Assert.AreEqual(980, entering.Health);
+        Assert.AreEqual(2, hero.LastHitCount);
+    }
+    [Test]
+    public void ThrustHitsOnlyOneInNarrowForwardArcWithHigherDamage()
+    {
+        var thrust = new AttackStep(AttackKind.Thrust, 1, 0.3f, 0.1f, 0.72f, 24, 1.25f, 1.8f, 1.3f);
+        var hero = new Fighter(new Point(), 5000, 20, 0, 1);
+        var front = new Fighter(new Point(0, 0.7f), 1000, 1, 0, 0.6f);
+        var behindFront = new Fighter(new Point(0, 1.1f), 1000, 1, 0, 0.6f);
+        var side = new Fighter(new Point(0.6f, 0.5f), 1000, 1, 0, 0.6f);
+        var battle = new CombatSimulation(hero, new[] { front, behindFront, side }, new[] { thrust });
+        battle.Advance(0.5);
+        Assert.AreEqual(964, front.Health);
+        Assert.AreEqual(1000, behindFront.Health);
+        Assert.AreEqual(1000, side.Health);
+        Assert.AreEqual(1, hero.LastHitCount);
+    }
+    [Test]
+    public void ComboCyclesDifferentAttacksAndRestartsFromFirstStepInNewBattle()
+    {
+        var hero = new Fighter(new Point(), 5000, 1, 0, 1.2f);
+        var enemy = new Fighter(new Point(0, 0.7f), 5000, 1, 0, 0.6f);
+        var battle = new CombatSimulation(hero, enemy);
+        AttackKind[] expected = { AttackKind.DiagonalSlash, AttackKind.ReverseSlash, AttackKind.Thrust, AttackKind.DiagonalSlash };
+        int count = 0, previous = 0;
+        for (int tick = 0; tick < 300 && count < expected.Length; tick++)
+        {
+            battle.Advance(CombatSimulation.Tick);
+            if (hero.Attacks == previous) continue;
+            Assert.AreEqual(expected[count++], hero.CurrentAttack.Kind); previous = hero.Attacks;
+        }
+        Assert.AreEqual(4, count);
+        var restarted = new CombatSimulation(new Fighter(new Point(), 5000, 1, 0, 1.2f),
+            new Fighter(new Point(0, 0.7f), 5000, 1, 0, 0.6f));
+        restarted.Advance(0.3);
+        Assert.AreEqual(AttackKind.DiagonalSlash, restarted.Hero.CurrentAttack.Kind);
     }
 }

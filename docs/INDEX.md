@@ -1,6 +1,6 @@
 # 강화의 탑 — 문서 인덱스
 
-**Updated:** 2026-10-21. 기존 `강화의_탑_FINAL_GDD.zip`의 00~22 문서 및 ADR을 보존하고, 최신 전투 설계와 Codex 작업 가이드를 추가했다. 오래된 문서는 통째로 삭제·재작성하지 않았다.
+**Updated:** 2026-10-22. 기존 `강화의_탑_FINAL_GDD.zip`의 00~22 문서 및 ADR을 보존하고, 최신 전투 설계와 Codex 작업 가이드를 추가했다. 오래된 문서는 통째로 삭제·재작성하지 않았다.
 
 ## Priority
 1. `25_DECISION_REGISTER.md`: 확정/가설/보류, 충돌 우선순위
@@ -24,9 +24,9 @@
 2. `AGENTS.md`, `INDEX.md`, `25_DECISION_REGISTER.md`, `23_COMBAT_PRESENTATION_2026_10.md` 읽기.
 3. `Assets/Scenes/CombatPrototype.unity`에 placeholder 1 Player + 1 Monster 구현.
 4. 타겟→접근→4방향 시선→타격/피격/사망 검증.
-5. 클리브→군집(5/8/12)→보스 직선 돌진+측면 회피 테스트.
+5. 동작별 다중 베기/찌르기 콤보→군집(5/8/12)→보스 직선 돌진+측면 회피 테스트.
 
 **Do not claim the GDD numbers are final.**
 
 ## Prototype implementation
-- `26_COMBAT_PROTOTYPE.md`: 1~12마리 자동전투·전방 클리브·공격 넉백·압박 재배치·5/8/12 밀집 비교와 Unity 수동 테스트 절차.
+- `26_COMBAT_PROTOTYPE.md`: 1~12마리 자동전투·동작별 전방 다중 베기/단일 찌르기 콤보·공격 넉백·압박 재배치·5/8/12 밀집 비교와 Unity 수동 테스트 절차.

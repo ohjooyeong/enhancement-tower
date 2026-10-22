@@ -1,4 +1,5 @@
 using EnhancementTower.Combat;
+using EnhancementTower.Data;
 using UnityEngine;
 
 namespace EnhancementTower.Presentation
@@ -9,8 +10,7 @@ namespace EnhancementTower.Presentation
         [SerializeField, Min(1)] private int heroDamage = 12, monsterDamage = 6;
         [SerializeField] private Vector2 heroStart = new Vector2(-0.7f, -1.8f), monsterStart = new Vector2(0.8f, 1.8f);
         [SerializeField, Range(1, 12)] private int monsterCount = 5;
-        [SerializeField, Range(0, 1)] private float cleaveMultiplier = 0.35f;
-        [SerializeField, Range(0, 4)] private int maxSecondaryHits = 3;
+        [SerializeField] private ComboDefinition comboDefinition;
         [SerializeField] private bool enableReposition = true;
         [SerializeField, Min(1)] private int pressureThreshold = 3;
         [SerializeField, Range(0.1f, 0.8f)] private float repositionDistance = 0.5f;
@@ -68,7 +68,7 @@ namespace EnhancementTower.Presentation
             }
             simulation = new CombatSimulation(
                 new Fighter(new Point(playerStart.x, playerStart.y), heroHealth, heroDamage, 1.9f, 0.85f),
-                monsters, cleaveMultiplier, maxSecondaryHits,
+                monsters, comboDefinition != null ? comboDefinition.Snapshot() : AttackStep.DefaultCombo(),
                 new RepositionSettings(enableReposition, pressureThreshold, repositionDistance, repositionCooldown, retreatDistance), knockbackDistance);
         }
         private SpriteRenderer MakeSprite(string label, Transform parent, Vector3 position, Vector2 size, Color color, int order)
@@ -120,23 +120,34 @@ namespace EnhancementTower.Presentation
             float health = (float)fighter.Health / fighter.MaxHealth;
             view.HealthFill.transform.localScale = new Vector3(0.55f * health, 0.04f, 1);
             view.HealthFill.transform.localPosition = new Vector3(-0.275f * (1 - health), 0.76f, 0);
-            view.Body.color = fighter.HitFlash > 0 ? Color.white : fighter.Alive ? view.Color : Color.gray;
+            view.Body.color = fighter.HitFlash > 0 ? (fighter.LastHitKind == AttackKind.Thrust ? new Color(0.6f, 1, 1) : Color.white) : fighter.Alive ? view.Color : Color.gray;
+            Vector2 recoil = fighter.Alive ? new Vector2(fighter.HitDirection.X, fighter.HitDirection.Y) * fighter.HitFlash * 0.5f : Vector2.zero;
+            view.Body.transform.localPosition = new Vector3(recoil.x, 0.3f + recoil.y, 0);
             view.Body.transform.localScale = fighter.Alive ? new Vector3(0.4f, 0.6f, 1) : new Vector3(0.5f, 0.15f, 1);
             view.Blade.enabled = fighter.Alive && fighter.SlashTime > 0;
             Vector2 attack = new Vector2(fighter.AttackAim.X, fighter.AttackAim.Y);
-            view.Slash.localPosition = (Vector3)(attack * 0.5f) + new Vector3(0, 0.3f, 0);
-            view.Slash.localRotation = Quaternion.Euler(0, 0, Mathf.Atan2(attack.y, attack.x) * Mathf.Rad2Deg - 55 + (1 - fighter.SlashTime / 0.16f) * 110);
+            AttackStep step = fighter.CurrentAttack;
+            float duration = Mathf.Max(0.01f, step.Active);
+            float progress = Mathf.Clamp01(1 - fighter.SlashTime / duration);
+            float angle = Mathf.Atan2(attack.y, attack.x) * Mathf.Rad2Deg;
+            bool thrust = step.Kind == AttackKind.Thrust;
+            float sweep = step.Kind == AttackKind.ReverseSlash ? 65 - progress * 130 : -55 + progress * 110;
+            view.Slash.localPosition = (Vector3)(attack * (thrust ? 0.35f + Mathf.Sin(progress * Mathf.PI) * 0.4f : 0.5f)) + new Vector3(0, 0.3f, 0);
+            view.Slash.localRotation = Quaternion.Euler(0, 0, angle + (thrust ? 0 : sweep));
+            view.Slash.localScale = new Vector3(thrust ? 0.75f : 0.85f, thrust ? 0.11f : 0.07f, 1);
+            view.Blade.color = thrust ? new Color(0.5f, 1, 1) : step.Kind == AttackKind.ReverseSlash ? new Color(1, 0.6f, 0.2f) : Color.yellow;
             view.Blade.sortingOrder = depth + 2;
         }
         private void OnGUI()
         {
             if (simulation == null) return;
             GUI.Label(new Rect(12, 12, 400, 30), $"Hero {simulation.Hero.Health}/{heroHealth}  {simulation.Hero.State}");
-            GUI.Label(new Rect(12, 40, 400, 30), $"Enemies {simulation.LivingMonsters}/{simulation.Monsters.Count} | Last slash hits: {simulation.Hero.LastHitCount}");
+            GUI.Label(new Rect(12, 40, 400, 30), $"Enemies {simulation.LivingMonsters}/{simulation.Monsters.Count} | Swing hits: {simulation.Hero.LastHitCount}");
             if (!simulation.Hero.Alive || simulation.LivingMonsters == 0)
                 GUI.Label(new Rect(12, 216, 400, 30), simulation.Hero.Alive ? "CLEAR" : "DEFEAT");
             GUI.Label(new Rect(12, 68, 500, 30), $"Pressure {simulation.Pressure} | Repositions {simulation.Repositions} | CD {simulation.RepositionCooldown:F1}s");
             GUI.Label(new Rect(12, 94, 500, 30), $"Rear limit {simulation.RetreatFloor:F2} | Hero Y {simulation.Hero.Position.Y:F2}");
+            GUI.Label(new Rect(12, 278, 500, 30), $"Attack: {simulation.Hero.CurrentAttack.Kind} | Combo slot: {simulation.Hero.ComboIndex + 1}");
             float targetDistance = simulation.Hero.Target == null ? 0 :
                 (simulation.Hero.Target.Position - simulation.Hero.Position).Length;
             GUI.Label(new Rect(12, 248, 500, 30), $"Hero attacks {simulation.Hero.Attacks} | Target distance {targetDistance:F3}");
