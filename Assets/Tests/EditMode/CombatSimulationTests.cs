@@ -309,4 +309,55 @@ public class CombatSimulationTests
         Assert.Greater(hero.Attacks, 5);
         Assert.LessOrEqual(battle.RepositionTravel, battle.Repositions * 0.5001f);
     }
+    [Test]
+    public void AttackEntryMatchesHitRangeAtFloatingPointBoundary()
+    {
+        var hero = new Fighter(new Point(-2, -3), 1000, 12, 0, 0.85f);
+        var enemy = new Fighter(new Point(-1.14995f, -3), 1000, 1, 0, 0.85f);
+        Assert.IsTrue(CombatSimulation.InArc(hero.Position, new Point(1, 0), enemy.Position, hero.Range, 180));
+        var battle = new CombatSimulation(hero, enemy);
+        battle.Advance(0.4);
+        Assert.Greater(hero.Attacks, 0);
+        Assert.Less(enemy.Health, 1000);
+    }
+    [Test]
+    public void ApproachingHeroSwitchesToNearbyEnemyInsteadOfPursuingBlockedTarget()
+    {
+        var hero = new Fighter(new Point(-2, -3), 1000, 12, 1.9f, 0.85f);
+        var original = new Fighter(new Point(-1, -2), 1000, 1, 0, 0.85f);
+        var closer = new Fighter(new Point(1, 2), 1000, 1, 0, 0.85f);
+        var battle = new CombatSimulation(hero, original, closer);
+        battle.Advance(CombatSimulation.Tick); // Acquire original target.
+        original.Position = new Point(1.8f, -2);
+        closer.Position = new Point(-1.4f, -3); // Blocks the original approach while already attackable.
+        battle.Advance(0.5);
+        Assert.AreSame(closer, hero.Target);
+        Assert.Greater(hero.Attacks, 0);
+        Assert.Less(closer.Health, 1000);
+    }
+    [TestCase(-2f)]
+    [TestCase(2f)]
+    public void RearCornerCrowdDoesNotSilentlyStopAttacking(float wallX)
+    {
+        float inward = wallX < 0 ? 1 : -1;
+        Point[] offsets = { new Point(0, 0.7f), new Point(0.6f, 0.1f), new Point(0.6f, 0.6f),
+            new Point(1.2f, 0.2f), new Point(0.2f, 1.2f), new Point(1.2f, 0.8f),
+            new Point(0.7f, 1.3f), new Point(1.5f, 1.2f) };
+        var enemies = new Fighter[offsets.Length];
+        for (int i = 0; i < offsets.Length; i++)
+            enemies[i] = new Fighter(new Point(wallX + offsets[i].X * inward, -3 + offsets[i].Y), 5000, 1, 1.4f, 0.85f);
+        var hero = new Fighter(new Point(wallX, -3), 5000, 1, 1.9f, 0.85f);
+        var battle = new CombatSimulation(hero, enemies);
+        int previousAttacks = 0, silentTicks = 0;
+        for (int tick = 0; tick < 1200; tick++)
+        {
+            battle.Advance(CombatSimulation.Tick);
+            silentTicks = hero.Attacks == previousAttacks ? silentTicks + 1 : 0;
+            previousAttacks = hero.Attacks;
+            Assert.Less(silentTicks, 240, "A living hero must not get stuck without attacking for four seconds.");
+            Assert.GreaterOrEqual(hero.Position.Y, battle.RetreatFloor - 0.0001f);
+            foreach (var enemy in enemies) Assert.GreaterOrEqual((hero.Position - enemy.Position).Length, 0.5599f);
+        }
+        Assert.Greater(hero.Attacks, 10);
+    }
 }

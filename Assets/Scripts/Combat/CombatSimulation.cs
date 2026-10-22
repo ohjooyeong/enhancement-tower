@@ -63,6 +63,7 @@ namespace EnhancementTower.Combat
     {
         public const float Tick = 1f / 60f;
         public const float FootRadius = 0.28f;
+        private const float RangeTolerance = 0.0001f;
         public readonly Fighter Hero;
         // Compatibility with the original duel tests and callers.
         public Fighter Monster => enemies[0];
@@ -141,20 +142,31 @@ namespace EnhancementTower.Combat
                 actor.Target = SelectTarget(actor);
             Fighter target = actor.Target;
             if (target == null) { actor.State = CombatState.Search; if (actor == Hero) repositioning = false; return; }
+            // A moving crowd can put another enemy between the hero and its retained target.
+            // Reconsider only while approaching an out-of-range target; never cancel an attack.
+            if (actor == Hero && actor.State == CombatState.Approach &&
+                !WithinRange(actor.Position, target.Position, actor.Range))
+            {
+                Fighter nearest = SelectTarget(actor);
+                if (nearest != null && nearest != target &&
+                    (WithinRange(actor.Position, nearest.Position, actor.Range) ||
+                    (nearest.Position - actor.Position).Length + 0.05f < (target.Position - actor.Position).Length))
+                    actor.Target = target = nearest;
+            }
             Point delta = target.Position - actor.Position;
             if (actor.State != CombatState.Attack) actor.Aim = delta.Normalized;
             switch (actor.State)
             {
                 case CombatState.Search: actor.State = CombatState.Approach; break;
                 case CombatState.Approach:
-                    if (delta.Length <= actor.Range)
+                    if (WithinRange(actor.Position, target.Position, actor.Range))
                     {
                         actor.State = CombatState.Attack; actor.AttackAim = actor.Aim;
                         actor.PhaseTime = 0; actor.AttackTarget = target;
                     }
                     else
                     {
-                        float distance = Math.Min(actor.Speed * Tick, delta.Length - actor.Range);
+                        float distance = Math.Min(actor.Speed * Tick, delta.Length - (actor.Range - 0.005f));
                         distance = Math.Min(distance, Math.Max(0, delta.Length - FootRadius * 2));
                         Point before = actor.Position;
                         Point direction = actor.Aim;
@@ -365,10 +377,12 @@ namespace EnhancementTower.Combat
             return Math.Max(0, Math.Min(1, (-b - (float)Math.Sqrt(discriminant)) / a - 0.0001f));
         }
         private static Point Clamp(Point p) => new Point(Math.Max(-2, Math.Min(2, p.X)), Math.Max(-3, Math.Min(4, p.Y)));
+        private static bool WithinRange(Point origin, Point target, float range) =>
+            (target - origin).Length <= range + RangeTolerance;
         public static bool InArc(Point origin, Point aim, Point target, float range, float degrees)
         {
             Point offset = target - origin;
-            if (offset.Length > range + 0.0001f) return false;
+            if (!WithinRange(origin, target, range)) return false;
             Point a = aim.Normalized, b = offset.Normalized;
             return a.X * b.X + a.Y * b.Y + 0.00001f >= Math.Cos(degrees * Math.PI / 360);
         }

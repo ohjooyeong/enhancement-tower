@@ -136,6 +136,9 @@ namespace EnhancementTower.Presentation
                 GUI.Label(new Rect(12, 216, 400, 30), simulation.Hero.Alive ? "CLEAR" : "DEFEAT");
             GUI.Label(new Rect(12, 68, 500, 30), $"Pressure {simulation.Pressure} | Repositions {simulation.Repositions} | CD {simulation.RepositionCooldown:F1}s");
             GUI.Label(new Rect(12, 94, 500, 30), $"Rear limit {simulation.RetreatFloor:F2} | Hero Y {simulation.Hero.Position.Y:F2}");
+            float targetDistance = simulation.Hero.Target == null ? 0 :
+                (simulation.Hero.Target.Position - simulation.Hero.Position).Length;
+            GUI.Label(new Rect(12, 248, 500, 30), $"Hero attacks {simulation.Hero.Attacks} | Target distance {targetDistance:F3}");
             if (GUI.Button(new Rect(12, 128, 100, 38), "Restart")) Restart();
             if (GUI.Button(new Rect(118, 128, 70, 38), "5 foes")) { wallTest = false; monsterCount = 5; Restart(); }
             if (GUI.Button(new Rect(194, 128, 70, 38), "8 foes")) { wallTest = false; monsterCount = 8; Restart(); }
