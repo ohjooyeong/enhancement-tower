@@ -171,9 +171,13 @@ MonoBehaviour:
   fixedSeed: 12345
   showHitEffects: 1
   showDamageNumbers: 1
-  playCombatSounds: 1
+  playCombatSounds: 0
   showAttackArea: 0
   combatVolume: 0.18
+  bossHealth: 600
+  bossTelegraph: 1.1
+  bossChargeSpeed: 5
+  bossChargeDistance: 3.2
 --- !u!4 &505755048
 Transform:
   m_ObjectHideFlags: 0
