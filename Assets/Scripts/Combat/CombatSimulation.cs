@@ -47,6 +47,7 @@ namespace EnhancementTower.Combat
         public Point Position, Movement, Aim = new Point(0, 1), AttackAim;
         public CombatState State;
         public readonly int MaxHealth, Damage, Defense;
+        public readonly DamageProfile DamageRules;
         public readonly float ThreatWeight;
         public Fighter Target { get; internal set; }
         internal Fighter AttackTarget;
@@ -60,7 +61,9 @@ namespace EnhancementTower.Combat
         public float HitFlash { get; internal set; }
         public int HitsTaken { get; private set; }
         public long DamageTaken { get; private set; }
-        internal void RecordDamage(int actualDamage) { HitsTaken++; DamageTaken += actualDamage; }
+        public int CriticalHitsTaken { get; private set; }
+        internal void RecordDamage(int actualDamage, bool critical)
+        { HitsTaken++; DamageTaken += actualDamage; if (critical) CriticalHitsTaken++; }
         public Point HitDirection { get; internal set; }
         public AttackKind LastHitKind { get; internal set; }
         public float SlashTime { get; internal set; }
@@ -70,11 +73,12 @@ namespace EnhancementTower.Combat
         internal float KnockbackCooldown;
         public bool Alive => Health > 0;
         public Fighter(Point position, int health, int damage, float speed, float range,
-            float windup = 0.22f, float recovery = 0.68f, int defense = 0, float threatWeight = 1)
+            float windup = 0.22f, float recovery = 0.68f, int defense = 0, float threatWeight = 1, DamageProfile damageProfile = null)
         {
             if (health <= 0 || damage <= 0 || speed < 0 || range < 0.6f || windup <= 0 || recovery <= 0 || defense < 0 || threatWeight <= 0 || float.IsNaN(threatWeight) || float.IsInfinity(threatWeight))
                 throw new ArgumentOutOfRangeException(nameof(health), "Invalid prototype combat settings.");
             Position = position; Health = MaxHealth = health; Damage = damage;
+            DamageRules = damageProfile ?? new DamageProfile();
             ThreatWeight = threatWeight; Defense = defense; Speed = speed; Range = range; Windup = windup; Recovery = recovery;
         }
     }
@@ -159,7 +163,7 @@ namespace EnhancementTower.Combat
         private bool constrained, advanceEnded;
         private int nextConstraintCheck;
         public readonly int Seed;
-        private uint randomState;
+        private uint randomState, damageRandomState;
         private struct MoveOption { public Point Goal, Next; public bool Bent; public float Cost; }
         private readonly MoveOption[] moveOptions = new MoveOption[48];
         private readonly double[] choiceScores;
@@ -178,6 +182,8 @@ namespace EnhancementTower.Combat
                 randomState ^= randomState >> 16;
             }
             if (randomState == 0) randomState = 0x6d2b79f5u;
+            damageRandomState = randomState ^ 0xa511e9b3u;
+            if (damageRandomState == 0) damageRandomState = 1;
             choiceScores = new double[Math.Max(48, monsters.Length)];
             Tactics = tactics ?? new TacticalSettings(false);
             combo = attacks == null ? AttackStep.DefaultCombo(hero.Windup, hero.Recovery) : (AttackStep[])attacks.Clone();
@@ -352,7 +358,7 @@ namespace EnhancementTower.Combat
                     {
                         actor.Attacks++; actor.SlashTime = step.Active;
                         if (actor != Hero && target.Alive && InArc(actor.Position, actor.AttackAim, target.Position, actor.Range, 180))
-                            DealHit(actor, target, actor.Damage);
+                            DealHit(actor, target, 1);
                     }
                     if (actor == Hero && actor.PhaseTime >= step.Windup && previous < step.Windup + step.Active)
                         ResolveSwing(step);
@@ -414,8 +420,7 @@ namespace EnhancementTower.Combat
                 }
                 if (best < 0) break;
                 hitOnSwing[best] = Hero.Attacks;
-                int damage = Math.Max(1, (int)Math.Round(Hero.Damage * step.DamageScale, MidpointRounding.AwayFromZero));
-                DealHit(Hero, enemies[best], damage);
+                DealHit(Hero, enemies[best], step.DamageScale);
             }
         }
         // Soft local relaxation also runs while attacking: stopping must not freeze a pile-up.
@@ -632,11 +637,20 @@ namespace EnhancementTower.Combat
                 if (enemies[i].Alive) fraction = Math.Min(fraction, SafeFraction(start, motion, enemies[i].Position));
             return start + motion * fraction;
         }
-        private void DealHit(Fighter attacker, Fighter target, int rawDamage)
+        private double DamageRoll()
+        {
+            damageRandomState ^= damageRandomState << 13;
+            damageRandomState ^= damageRandomState >> 17;
+            damageRandomState ^= damageRandomState << 5;
+            return damageRandomState / 4294967296.0;
+        }
+        private void DealHit(Fighter attacker, Fighter target, float actionScale)
         {
             int beforeHealth = target.Health;
-            target.Health = Math.Max(0, target.Health - Math.Max(1, rawDamage - target.Defense));
-            target.RecordDamage(beforeHealth - target.Health);
+            int damage = attacker.DamageRules.Resolve(attacker.Damage, actionScale, target.Defense,
+                DamageRoll(), DamageRoll(), out bool critical);
+            target.Health = Math.Max(0, target.Health - damage);
+            target.RecordDamage(beforeHealth - target.Health, critical);
             target.LastHitKind = attacker.CurrentAttack.Kind;
             target.HitDirection = (target.Position - attacker.Position).Normalized;
             target.HitFlash = target.LastHitKind == AttackKind.Thrust ? 0.2f : 0.14f;

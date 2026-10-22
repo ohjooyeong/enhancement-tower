@@ -841,4 +841,95 @@ public class CombatSimulationTests
             Assert.AreEqual(a.Monsters[i].HitsTaken, b.Monsters[i].HitsTaken);
         }
     }
+
+    [Test]
+    public void DamageRollIncludesBothIntegerEndpointsAndCriticalBeforeDefense()
+    {
+        var rules = new DamageProfile(0.85f, 1.15f, 0.15f, 1.5f);
+        Assert.AreEqual(10, rules.Minimum(12)); Assert.AreEqual(14, rules.Maximum(12));
+        Assert.AreEqual(7, rules.Resolve(12, 1, 3, 0, 0.9, out bool lowCrit));
+        Assert.AreEqual(11, rules.Resolve(12, 1, 3, 0.999999, 0.9, out _));
+        Assert.AreEqual(35, rules.Resolve(12, 1.8f, 3, 0.999999, 0, out bool highCrit));
+        Assert.IsFalse(lowCrit); Assert.IsTrue(highCrit);
+        Assert.AreEqual(1, rules.Resolve(12, 1, 999, 0, 0, out _));
+    }
+    [Test]
+    public void DamageProfileRejectsInvalidAuthoredValues()
+    {
+        Assert.Throws<System.ArgumentOutOfRangeException>(() => new DamageProfile(1.2f, 0.8f));
+        Assert.Throws<System.ArgumentOutOfRangeException>(() => new DamageProfile(criticalChance: float.NaN));
+        Assert.Throws<System.ArgumentOutOfRangeException>(() => new DamageProfile(criticalMultiplier: 0.5f));
+        Assert.Throws<System.ArgumentOutOfRangeException>(() => new DamageProfile(float.PositiveInfinity));
+    }
+    [Test]
+    public void CriticalChanceZeroAndOneHaveExactBoundaries()
+    {
+        var never = new DamageProfile(); var always = new DamageProfile(criticalChance: 1);
+        Assert.AreEqual(12, never.Resolve(12, 1, 0, 0, 0, out bool no));
+        Assert.AreEqual(18, always.Resolve(12, 1, 0, 0, 0.999999, out bool yes));
+        Assert.IsFalse(no); Assert.IsTrue(yes);
+    }
+    private static CombatSimulation VariableDamageBattle(int seed, DamageProfile profile = null)
+    {
+        var rules = profile ?? new DamageProfile(0.85f, 1.15f, 0.2f, 1.5f);
+        return new CombatSimulation(new Fighter(new Point(0, 0), 10000, 12, 0, 0.85f,
+            defense: 1, damageProfile: rules), new[] {
+                new Fighter(new Point(0, 0.7f), 10000, 6, 0, 0.85f, defense: 3, damageProfile: rules) },
+            null, new RepositionSettings(false), seed: seed);
+    }
+    [Test]
+    public void VariableDamageReplaysAcrossRenderRatesAndCountsCriticalHits()
+    {
+        var a = VariableDamageBattle(42); var b = VariableDamageBattle(42);
+        for (int i = 0; i < 1800; i++) a.Advance(1.0 / 30);
+        for (int i = 0; i < 7200; i++) b.Advance(1.0 / 120);
+        Assert.AreEqual(a.Monster.Health, b.Monster.Health);
+        Assert.AreEqual(a.Hero.Health, b.Hero.Health);
+        Assert.AreEqual(a.Monster.CriticalHitsTaken, b.Monster.CriticalHitsTaken);
+        Assert.Greater(a.Monster.CriticalHitsTaken, 0);
+        Assert.Less(a.Monster.CriticalHitsTaken, a.Monster.HitsTaken);
+        Assert.AreEqual(a.Monster.MaxHealth - a.Monster.Health, a.Monster.DamageTaken);
+    }
+    [Test]
+    public void CriticalLethalHitReportsActualHealthLossOnce()
+    {
+        var hero = new Fighter(new Point(), 100, 12, 0, 0.85f,
+            damageProfile: new DamageProfile(criticalChance: 1));
+        var enemy = new Fighter(new Point(0, 0.7f), 7, 1, 0, 0.85f);
+        var sim = new CombatSimulation(hero, enemy); sim.Advance(5);
+        Assert.AreEqual(7, enemy.DamageTaken); Assert.AreEqual(1, enemy.CriticalHitsTaken);
+        Assert.AreEqual(1, enemy.HitsTaken);
+    }
+    [Test]
+    public void ManySeedsShowDamageVariationAndExpectedCriticalFrequency()
+    {
+        long damage = 0; int crits = 0; var results = new System.Collections.Generic.HashSet<long>();
+        for (int seed = 0; seed < 1000; seed++)
+        {
+            var sim = VariableDamageBattle(seed); sim.Advance(0.5);
+            Assert.AreEqual(1, sim.Monster.HitsTaken);
+            damage += sim.Monster.DamageTaken; crits += sim.Monster.CriticalHitsTaken;
+            results.Add(sim.Monster.DamageTaken);
+        }
+        Assert.Greater(results.Count, 5);
+        Assert.That(crits, Is.InRange(150, 250));
+        Assert.That(damage / 1000.0, Is.InRange(9.7, 10.8)); // about 12 * 1.1 - 3, with rounding
+    }
+    [Test]
+    public void DamageRandomDrawsDoNotChangeTacticalRandomStream()
+    {
+        // No deaths in this interval: damage changes must not consume focus/movement random draws.
+        CombatSimulation Build(DamageProfile profile) => new CombatSimulation(
+            new Fighter(new Point(), 100000, 12, 1.9f, 0.85f, damageProfile: profile), new[] {
+                new Fighter(new Point(0, 0.7f), 100000, 1, 0, 0.85f),
+                new Fighter(new Point(-0.7f, 0), 100000, 1, 0, 0.85f),
+                new Fighter(new Point(0.7f, 0), 100000, 1, 0, 0.85f) }, null,
+            tactics: new TacticalSettings(movementTemperature: 0.35f, targetTemperature: 0.55f), seed: 73);
+        var a = Build(new DamageProfile()); var b = Build(new DamageProfile(0.85f, 1.15f, 0.2f));
+        a.Advance(15); b.Advance(15);
+        Assert.AreEqual(a.Hero.Position.X, b.Hero.Position.X);
+        Assert.AreEqual(a.Hero.Position.Y, b.Hero.Position.Y);
+        Assert.AreEqual(a.MovementChoices, b.MovementChoices);
+        Assert.AreEqual(a.TargetChoices, b.TargetChoices);
+    }
 }

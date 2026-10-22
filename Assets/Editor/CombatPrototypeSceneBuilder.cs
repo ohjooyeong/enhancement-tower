@@ -17,6 +17,8 @@ public static class CombatPrototypeSceneBuilder
             AssetDatabase.LoadAssetAtPath<EnhancementTower.Data.ComboDefinition>("Assets/Data/LongswordCombo.asset");
         serialized.FindProperty("tacticsDefinition").objectReferenceValue =
             AssetDatabase.LoadAssetAtPath<EnhancementTower.Data.CombatTacticsDefinition>("Assets/Data/CombatTactics.asset");
+        serialized.FindProperty("damageDefinition").objectReferenceValue =
+            AssetDatabase.LoadAssetAtPath<EnhancementTower.Data.CombatDamageDefinition>("Assets/Data/CombatDamage.asset");
         serialized.ApplyModifiedPropertiesWithoutUndo();
         EditorSceneManager.SaveScene(scene, "Assets/Scenes/CombatPrototype.unity");
     }
@@ -30,6 +32,9 @@ public static class CombatPrototypeSceneBuilder
         const string tacticsPath = "Assets/Data/CombatTactics.asset";
         if (AssetDatabase.LoadAssetAtPath<EnhancementTower.Data.CombatTacticsDefinition>(tacticsPath) == null)
             AssetDatabase.CreateAsset(ScriptableObject.CreateInstance<EnhancementTower.Data.CombatTacticsDefinition>(), tacticsPath);
+        const string damagePath = "Assets/Data/CombatDamage.asset";
+        if (AssetDatabase.LoadAssetAtPath<EnhancementTower.Data.CombatDamageDefinition>(damagePath) == null)
+            AssetDatabase.CreateAsset(ScriptableObject.CreateInstance<EnhancementTower.Data.CombatDamageDefinition>(), damagePath);
         AssetDatabase.SaveAssets();
     }
 }

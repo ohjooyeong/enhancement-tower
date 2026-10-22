@@ -9,7 +9,8 @@ namespace EnhancementTower.Presentation
         public sealed class ActorFeedback
         {
             internal long ObservedDamage;
-            internal int ObservedHits;
+            internal int ObservedHits, ObservedCriticalHits;
+            internal bool Critical;
             internal float SparkTime, NumberTime, MergeTime;
             internal int DisplayDamage;
             internal string Number = "";
@@ -86,7 +87,7 @@ namespace EnhancementTower.Presentation
         }
         public void Reset(ActorFeedback state)
         {
-            state.ObservedDamage = 0; state.ObservedHits = 0;
+            state.ObservedDamage = 0; state.ObservedHits = state.ObservedCriticalHits = 0; state.Critical = false;
             state.SparkTime = state.NumberTime = state.MergeTime = 0;
             state.DisplayDamage = 0; state.Number = "";
             for (int i = 0; i < state.Rays.Length; i++) state.Rays[i].enabled = false;
@@ -117,11 +118,13 @@ namespace EnhancementTower.Presentation
             {
                 long amount = actor.DamageTaken - state.ObservedDamage;
                 state.DisplayDamage = state.MergeTime > 0 ? state.DisplayDamage + (int)amount : (int)amount;
-                state.Number = "-" + state.DisplayDamage + (actor.Alive ? "" : " DOWN");
+                state.Critical = (state.MergeTime > 0 && state.Critical) || actor.CriticalHitsTaken > state.ObservedCriticalHits;
+                state.ObservedCriticalHits = actor.CriticalHitsTaken;
+                state.Number = (state.Critical ? "CRIT " : "") + "-" + state.DisplayDamage + (actor.Alive ? "" : " DOWN");
                 state.ObservedHits = actor.HitsTaken; state.ObservedDamage = actor.DamageTaken;
                 state.MergeTime = 0.12f; state.NumberTime = 0.65f; state.SparkTime = 0.12f;
                 state.NumberOrigin = new Vector3(actor.Position.X, actor.Position.Y + 0.85f, 0);
-                state.Color = hero ? new Color(1, 0.45f, 0.4f) : AttackColor(actor.LastHitKind);
+                state.Color = state.Critical ? new Color(1, 0.35f, 0.85f) : hero ? new Color(1, 0.45f, 0.4f) : AttackColor(actor.LastHitKind);
                 PresentedHits++;
                 if (Sound && Time.unscaledTime >= nextImpactTime)
                 {
@@ -145,11 +148,11 @@ namespace EnhancementTower.Presentation
         {
             if (!Numbers || state.NumberTime <= 0) return;
             if (numberStyle == null) numberStyle = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
-            numberStyle.fontSize = Mathf.Clamp(Mathf.RoundToInt(Screen.height / 55f), 14, 28);
+            numberStyle.fontSize = Mathf.RoundToInt(Mathf.Clamp(Screen.height / 55f, 14, 28) * (state.Critical ? 1.2f : 1));
             Vector3 world = state.NumberOrigin + Vector3.up * ((1 - state.NumberTime / 0.65f) * 0.45f);
             Vector3 screen = camera.WorldToScreenPoint(world);
             if (screen.z <= 0) return;
-            var rect = new Rect(screen.x - 75, Screen.height - screen.y - 16, 150, 32);
+            var rect = new Rect(screen.x - 110, Screen.height - screen.y - 22, 220, 44);
             float alpha = Mathf.Clamp01(state.NumberTime / 0.2f);
             numberStyle.normal.textColor = new Color(0, 0, 0, alpha);
             GUI.Label(new Rect(rect.x + 1, rect.y + 1, rect.width, rect.height), state.Number, numberStyle);

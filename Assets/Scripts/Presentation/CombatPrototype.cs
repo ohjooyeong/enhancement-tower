@@ -11,6 +11,7 @@ namespace EnhancementTower.Presentation
         [SerializeField] private Vector2 heroStart = new Vector2(-0.7f, -1.8f), monsterStart = new Vector2(0.8f, 1.8f);
         [SerializeField, Range(1, 12)] private int monsterCount = 5;
         [SerializeField] private ComboDefinition comboDefinition;
+        [SerializeField] private CombatDamageDefinition damageDefinition;
         [SerializeField] private CombatTacticsDefinition tacticsDefinition;
         [SerializeField] private bool enableReposition = true;
         [SerializeField, Min(1)] private int pressureThreshold = 3;
@@ -75,6 +76,8 @@ namespace EnhancementTower.Presentation
             Vector2 playerStart = trapTest ? new Vector2(0, -1.5f) : wallTest ? new Vector2(-2, -2) : heroStart;
             monsterViews = new ActorView[count];
             var monsters = new Fighter[count];
+            DamageProfile heroDamageRules = damageDefinition != null ? damageDefinition.Snapshot(true) : new DamageProfile(0.85f, 1.15f, 0.15f);
+            DamageProfile monsterDamageRules = damageDefinition != null ? damageDefinition.Snapshot(false) : new DamageProfile(0.85f, 1.15f, 0.05f);
             for (int i = 0; i < count; i++)
             {
                 // Authored scattered entry points, not movement lanes.
@@ -86,12 +89,14 @@ namespace EnhancementTower.Presentation
                 float threat = strong ? tacticsDefinition.strongEnemyThreat : 1;
                 monsters[i] = new Fighter(new Point(start.x, start.y), trapTest ? Mathf.Max(120, monsterHealth) : monsterHealth,
                     strong ? Mathf.Max(1, Mathf.RoundToInt(monsterDamage * 1.5f)) : monsterDamage,
-                    strong ? 1.05f : 1.4f, 0.85f, strong ? 0.5f : 0.3f, strong ? 0.9f : 0.7f, threatWeight: threat);
+                    strong ? 1.05f : 1.4f, 0.85f, strong ? 0.5f : 0.3f, strong ? 0.9f : 0.7f, defense: damageDefinition != null ? (strong ? damageDefinition.strongMonsterDefense : damageDefinition.monsterDefense) : (strong ? 3 : 0),
+                    threatWeight: threat, damageProfile: monsterDamageRules);
                 monsterViews[i] = MakeActor($"Monster {i + 1}", strong ? new Color(0.7f, 0.35f, 0.85f) : new Color(0.95f, 0.4f, 0.3f));
             }
             int seed = randomizeSeedEachRun ? unchecked((int)System.DateTime.UtcNow.Ticks ^ (++seedCounter * 16777619)) : fixedSeed;
             simulation = new CombatSimulation(
-                new Fighter(new Point(playerStart.x, playerStart.y), heroHealth, heroDamage, 1.9f, 0.85f),
+                new Fighter(new Point(playerStart.x, playerStart.y), heroHealth, heroDamage, 1.9f, 0.85f,
+                    defense: damageDefinition != null ? damageDefinition.heroDefense : 1, damageProfile: heroDamageRules),
                 monsters, comboDefinition != null ? comboDefinition.Snapshot() : AttackStep.DefaultCombo(),
                 new RepositionSettings(enableReposition, pressureThreshold, repositionDistance, repositionCooldown, retreatDistance), trapTest ? 0 : knockbackDistance,
                 tacticsDefinition != null ? tacticsDefinition.Snapshot() : new TacticalSettings(movementTemperature: 0.35f, targetTemperature: 0.55f), seed);

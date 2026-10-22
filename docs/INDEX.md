@@ -33,7 +33,7 @@
 - 설계 규칙: `04_COMBAT.md` / `25_DECISION_REGISTER.md`. 베기는 전방 가까운 적 **총 최대 3명**, 찌르기는 좁은 전방 **1명에게 강한 피해**. 주 대상+약한 주변 피해/랜덤 선택 방식은 폐기.
 - 콤보별 범위·대상 수·타격 시간·넉백·표현을 구분한다. 현재 사선 → 역베기 → 찌르기와 수치는 실험값.
 - 기본 콤보는 고정하고 지속 막힘에서만 조건부 돌파. 재배치는 적별 위협/준비 상태·벽·재교전 거리를 평가한다. 이동 방향·거리와 조준 타겟은 유효 후보의 확률 가중 선택이며 시드로 재현한다.
-- 정적 수치: `Assets/Data/LongswordCombo.asset` / `Assets/Data/CombatTactics.asset`. 조절/검증 방법: `26_COMBAT_PROTOTYPE.md`.
+- 정적 수치: `Assets/Data/LongswordCombo.asset` / `Assets/Data/CombatTactics.asset` / `Assets/Data/CombatDamage.asset`. 피해 범위·개별 치명타·방어 차감은 조절 가능한 프로토타입 수치다. 조절/검증 방법: `26_COMBAT_PROTOTYPE.md`.
 
 ## Prototype implementation
 - `26_COMBAT_PROTOTYPE.md`: 1~12마리 자동전투·동작별 전방 다중 베기/단일 찌르기 콤보·공격 넉백·압박 재배치·5/8/12 밀집 비교와 타격 피드백/선택형 판정 범위 표시와 Unity 수동 테스트 절차.
