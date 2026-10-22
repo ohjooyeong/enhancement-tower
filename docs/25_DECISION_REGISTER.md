@@ -18,6 +18,8 @@
 - Intro time/skip details and Farming scrolling illusion vs walking to next segment.
 - Economy rates, rebirth point curve, equipment upgrade and item counts, Day30 top 200 floors targets are balancing hypotheses.
 
+- 2026-10-22 user-approved prototype: attack knockback may temporarily overlap/pass through other monsters. Arena walls and hero foot-center separation remain enforced; no attack-cancel stun or hero phasing is implied. Distance/cooldown remain tuning assumptions.
+
 ## DEFERRED
 - Ranged regular enemies and ranged weapons, complex boss types, future towers/theme sectors, multiplayer shared hub, server economy, live ops, guilds, PvP, cosmetic titles, full collection, additional rarities.
 - Whether telegraph avoidance uses explicit reaction probability; favor physics/geometric safe spot plus movement constraints, not arbitrary perfect dodge.

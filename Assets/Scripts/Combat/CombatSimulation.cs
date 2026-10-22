@@ -31,6 +31,9 @@ namespace EnhancementTower.Combat
         public float HitFlash { get; internal set; }
         public float SlashTime { get; internal set; }
         public int Attacks { get; internal set; }
+        public float KnockbackRemaining { get; internal set; }
+        internal Point KnockbackDirection;
+        internal float KnockbackCooldown;
         public bool Alive => Health > 0;
         public Fighter(Point position, int health, int damage, float speed, float range,
             float windup = 0.22f, float recovery = 0.68f, int defense = 0)
@@ -71,6 +74,7 @@ namespace EnhancementTower.Combat
         public IReadOnlyList<Fighter> Monsters { get; }
         public readonly float CleaveMultiplier;
         public readonly int MaxSecondaryHits;
+        public readonly float KnockbackDistance;
         public int LivingMonsters
         {
             get { int count = 0; for (int i = 0; i < enemies.Length; i++) if (enemies[i].Alive) count++; return count; }
@@ -87,11 +91,14 @@ namespace EnhancementTower.Combat
         private Point repositionGoal, repositionNext;
         private bool hasRepositionNext;
         public CombatSimulation(Fighter hero, params Fighter[] monsters) : this(hero, monsters, 0.35f, 3) { }
-        public CombatSimulation(Fighter hero, Fighter[] monsters, float cleaveMultiplier, int maxSecondaryHits, RepositionSettings reposition = null)
+        public CombatSimulation(Fighter hero, Fighter[] monsters, float cleaveMultiplier, int maxSecondaryHits, RepositionSettings reposition = null, float knockbackDistance = 0)
         {
             if (hero == null || monsters == null || monsters.Length == 0) throw new ArgumentException("A hero and enemies are required.");
             if (float.IsNaN(cleaveMultiplier) || cleaveMultiplier < 0 || cleaveMultiplier > 1 || maxSecondaryHits < 0)
                 throw new ArgumentOutOfRangeException(nameof(cleaveMultiplier));
+            if (float.IsNaN(knockbackDistance) || float.IsInfinity(knockbackDistance) || knockbackDistance < 0 || knockbackDistance > 0.6f)
+                throw new ArgumentOutOfRangeException(nameof(knockbackDistance));
+            KnockbackDistance = knockbackDistance;
             RepositionRules = reposition ?? new RepositionSettings();
             RetreatFloor = Math.Max(-3, hero.Position.Y - RepositionRules.RetreatDistance);
             Hero = hero; enemies = (Fighter[])monsters.Clone();
@@ -128,12 +135,14 @@ namespace EnhancementTower.Combat
                 Step(Hero);
                 for (int i = 0; i < enemies.Length; i++) Step(enemies[i]);
                 SeparateMonsters();
+                ApplyKnockback();
                 Ticks++;
             }
         }
         private void Step(Fighter actor)
         {
             actor.Movement = new Point();
+            actor.KnockbackCooldown = Math.Max(0, actor.KnockbackCooldown - Tick);
             actor.HitFlash = Math.Max(0, actor.HitFlash - Tick);
             actor.SlashTime = Math.Max(0, actor.SlashTime - Tick);
             if (!actor.Alive) { actor.State = CombatState.Dead; actor.Target = null; return; }
@@ -166,6 +175,7 @@ namespace EnhancementTower.Combat
                     }
                     else
                     {
+                        if (actor.KnockbackRemaining > 0) break;
                         float distance = Math.Min(actor.Speed * Tick, delta.Length - (actor.Range - 0.005f));
                         distance = Math.Min(distance, Math.Max(0, delta.Length - FootRadius * 2));
                         Point before = actor.Position;
@@ -245,7 +255,7 @@ namespace EnhancementTower.Combat
                 for (int i = 0; i < enemies.Length; i++)
                 {
                     Fighter actor = enemies[i];
-                    if (!actor.Alive || actor.Speed <= 0) continue;
+                    if (!actor.Alive || actor.Speed <= 0 || actor.KnockbackRemaining > 0) continue;
                     Point correction = new Point();
                     for (int j = 0; j < enemies.Length; j++)
                     {
@@ -345,11 +355,33 @@ namespace EnhancementTower.Combat
                 if (enemies[i].Alive) fraction = Math.Min(fraction, SafeFraction(start, motion, enemies[i].Position));
             return start + motion * fraction;
         }
-        private static void DealHit(Fighter attacker, Fighter target, int rawDamage)
+        private void DealHit(Fighter attacker, Fighter target, int rawDamage)
         {
             target.Health = Math.Max(0, target.Health - Math.Max(1, rawDamage - target.Defense));
             target.HitFlash = 0.14f; attacker.LastHitCount++;
-            if (!target.Alive) { target.State = CombatState.Dead; target.Movement = new Point(); target.Target = null; }
+            if (attacker == Hero && target.Alive && KnockbackDistance > 0 && target.KnockbackCooldown <= 0)
+            {
+                target.KnockbackDirection = (target.Position - attacker.Position).Normalized;
+                target.KnockbackRemaining = KnockbackDistance;
+                target.KnockbackCooldown = 0.75f;
+            }
+            if (!target.Alive) { target.KnockbackRemaining = 0; target.State = CombatState.Dead; target.Movement = new Point(); target.Target = null; }
+        }
+        private void ApplyKnockback()
+        {
+            if (!Hero.Alive) return;
+            for (int i = 0; i < enemies.Length; i++)
+            {
+                Fighter actor = enemies[i];
+                if (!actor.Alive || actor.KnockbackRemaining <= 0) continue;
+                float distance = Math.Min(actor.KnockbackRemaining, 2.5f * Tick);
+                Point before = actor.Position;
+                // Monster bodies are soft: the impulse passes through other monsters.
+                // The hero foot circle and arena boundaries remain solid.
+                actor.Position = MoveWithoutCrossing(actor, Clamp(before + actor.KnockbackDirection * distance));
+                actor.Movement += (actor.Position - before) * (1f / Tick);
+                actor.KnockbackRemaining = (actor.Position - before).Length < 0.0001f ? 0 : Math.Max(0, actor.KnockbackRemaining - distance);
+            }
         }
         private Point MoveWithoutCrossing(Fighter actor, Point destination)
         {

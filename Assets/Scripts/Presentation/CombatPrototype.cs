@@ -23,6 +23,7 @@ namespace EnhancementTower.Presentation
             new Vector2(0.95f, 1.75f), new Vector2(-0.65f, 0.55f), new Vector2(-2.4f, 1.9f),
             new Vector2(0.3f, 0.4f), new Vector2(-1.15f, 2.05f), new Vector2(-1.9f, -0.1f)
         };
+        [SerializeField, Range(0, 0.6f)] private float knockbackDistance = 0.3f;
         private bool wallTest;
         private CombatSimulation simulation;
         private Sprite square;
@@ -68,7 +69,7 @@ namespace EnhancementTower.Presentation
             simulation = new CombatSimulation(
                 new Fighter(new Point(playerStart.x, playerStart.y), heroHealth, heroDamage, 1.9f, 0.85f),
                 monsters, cleaveMultiplier, maxSecondaryHits,
-                new RepositionSettings(enableReposition, pressureThreshold, repositionDistance, repositionCooldown, retreatDistance));
+                new RepositionSettings(enableReposition, pressureThreshold, repositionDistance, repositionCooldown, retreatDistance), knockbackDistance);
         }
         private SpriteRenderer MakeSprite(string label, Transform parent, Vector3 position, Vector2 size, Color color, int order)
         {

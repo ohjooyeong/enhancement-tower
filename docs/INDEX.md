@@ -29,4 +29,4 @@
 **Do not claim the GDD numbers are final.**
 
 ## Prototype implementation
-- `26_COMBAT_PROTOTYPE.md`: 1~12마리 자동전투·전방 클리브·압박 재배치·5/8/12 밀집 비교와 Unity 수동 테스트 절차.
+- `26_COMBAT_PROTOTYPE.md`: 1~12마리 자동전투·전방 클리브·공격 넉백·압박 재배치·5/8/12 밀집 비교와 Unity 수동 테스트 절차.
