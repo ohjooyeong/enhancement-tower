@@ -13,6 +13,9 @@ namespace EnhancementTower.Presentation
         [SerializeField] private ComboDefinition comboDefinition;
         [SerializeField] private CombatDamageDefinition damageDefinition;
         [SerializeField] private CombatTacticsDefinition tacticsDefinition;
+        [SerializeField] private FastMonsterDefinition fastMonsterDefinition;
+        [SerializeField] private bool includeFastMonsters = true;
+        private int normalCount, fastCount, heavyCount;
         [SerializeField] private bool enableReposition = true;
         [SerializeField, Min(1)] private int pressureThreshold = 3;
         [SerializeField, Range(0.1f, 0.8f)] private float repositionDistance = 0.5f;
@@ -48,6 +51,7 @@ namespace EnhancementTower.Presentation
             public PrototypeCombatFeedback.ActorFeedback Feedback;
             public SpriteRenderer Body, Blade, Direction, HealthBack, HealthFill, TargetMarker;
             public Color Color;
+            public Vector2 BodySize = new Vector2(0.4f, 0.6f);
         }
         private void Start()
         {
@@ -76,6 +80,8 @@ namespace EnhancementTower.Presentation
             Vector2 playerStart = trapTest ? new Vector2(0, -1.5f) : wallTest ? new Vector2(-2, -2) : heroStart;
             monsterViews = new ActorView[count];
             var monsters = new Fighter[count];
+            normalCount = fastCount = heavyCount = 0;
+            FastMonsterSettings fastSettings = fastMonsterDefinition != null ? fastMonsterDefinition.Snapshot() : new FastMonsterSettings();
             DamageProfile heroDamageRules = damageDefinition != null ? damageDefinition.Snapshot(true) : new DamageProfile(0.85f, 1.15f, 0.15f);
             DamageProfile monsterDamageRules = damageDefinition != null ? damageDefinition.Snapshot(false) : new DamageProfile(0.85f, 1.15f, 0.05f);
             for (int i = 0; i < count; i++)
@@ -85,13 +91,35 @@ namespace EnhancementTower.Presentation
                 Vector2 start = trapTest ? playerStart + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * 0.65f : wallTest ? (i == 0 ? new Vector2(-2, -1.35f) :
                     i == 1 ? new Vector2(-1.4f, -1.9f) : new Vector2(-1.4f, -1.35f)) : monsterStart + EntryOffsets[i];
                 start.x = Mathf.Clamp(start.x, -2, 2); start.y = Mathf.Clamp(start.y, -3, 4);
-                bool strong = tacticsDefinition != null && tacticsDefinition.mixedThreats && i % 4 == 3;
-                float threat = strong ? tacticsDefinition.strongEnemyThreat : 1;
-                monsters[i] = new Fighter(new Point(start.x, start.y), trapTest ? Mathf.Max(120, monsterHealth) : monsterHealth,
-                    strong ? Mathf.Max(1, Mathf.RoundToInt(monsterDamage * 1.5f)) : monsterDamage,
-                    strong ? 1.05f : 1.4f, 0.85f, strong ? 0.5f : 0.3f, strong ? 0.9f : 0.7f, defense: damageDefinition != null ? (strong ? damageDefinition.strongMonsterDefense : damageDefinition.monsterDefense) : (strong ? 3 : 0),
-                    threatWeight: threat, damageProfile: monsterDamageRules);
-                monsterViews[i] = MakeActor($"Monster {i + 1}", strong ? new Color(0.7f, 0.35f, 0.85f) : new Color(0.95f, 0.4f, 0.3f));
+                PrototypeMonsterKind kind = FastMonsterSettings.KindAt(i,
+                    tacticsDefinition != null && tacticsDefinition.mixedThreats, includeFastMonsters);
+                bool strong = kind == PrototypeMonsterKind.Heavy;
+                int defense = damageDefinition != null ? (strong ? damageDefinition.strongMonsterDefense : damageDefinition.monsterDefense) : (strong ? 3 : 0);
+                Point position = new Point(start.x, start.y);
+                if (kind == PrototypeMonsterKind.Fast)
+                {
+                    fastCount++;
+                    monsters[i] = fastSettings.Create(position, monsterHealth, monsterDamage, defense,
+                        monsterDamageRules, trapTest ? 120 : 1);
+                }
+                else
+                {
+                    if (strong) heavyCount++; else normalCount++;
+                    float threat = strong ? tacticsDefinition.strongEnemyThreat : 1;
+                    monsters[i] = new Fighter(position, trapTest ? Mathf.Max(120, monsterHealth) : monsterHealth,
+                        strong ? Mathf.Max(1, Mathf.RoundToInt(monsterDamage * 1.5f)) : monsterDamage,
+                        strong ? 1.05f : 1.4f, 0.85f, strong ? 0.5f : 0.3f, strong ? 0.9f : 0.7f,
+                        defense: defense, threatWeight: threat, damageProfile: monsterDamageRules);
+                }
+                Color color = kind == PrototypeMonsterKind.Fast ? new Color(1, 0.85f, 0.2f) :
+                    strong ? new Color(0.7f, 0.35f, 0.85f) : new Color(0.95f, 0.4f, 0.3f);
+                ActorView view = monsterViews[i] = MakeActor($"Monster {i + 1} ({kind})", color);
+                if (kind == PrototypeMonsterKind.Fast)
+                {
+                    view.BodySize = new Vector2(0.3f, 0.42f);
+                    view.Body.transform.localRotation = Quaternion.Euler(0, 0, 45);
+                }
+                else if (strong) view.BodySize = new Vector2(0.5f, 0.7f);
             }
             int seed = randomizeSeedEachRun ? unchecked((int)System.DateTime.UtcNow.Ticks ^ (++seedCounter * 16777619)) : fixedSeed;
             simulation = new CombatSimulation(
@@ -183,7 +211,7 @@ namespace EnhancementTower.Presentation
             view.Body.color = fighter.HitFlash > 0 ? (fighter.LastHitKind == AttackKind.Thrust ? new Color(0.6f, 1, 1) : Color.white) : fighter.Alive ? view.Color : Color.gray;
             Vector2 recoil = fighter.Alive ? new Vector2(fighter.HitDirection.X, fighter.HitDirection.Y) * fighter.HitFlash * 0.5f : Vector2.zero;
             view.Body.transform.localPosition = new Vector3(recoil.x, 0.3f + recoil.y, 0);
-            view.Body.transform.localScale = fighter.Alive ? new Vector3(0.4f, 0.6f, 1) : new Vector3(0.5f, 0.15f, 1);
+            view.Body.transform.localScale = fighter.Alive ? new Vector3(view.BodySize.x, view.BodySize.y, 1) : new Vector3(0.5f, 0.15f, 1);
             view.Blade.enabled = fighter.Alive && fighter.SlashTime > 0;
             Vector2 attack = new Vector2(fighter.AttackAim.X, fighter.AttackAim.Y);
             AttackStep step = fighter.CurrentAttack;
@@ -217,6 +245,9 @@ namespace EnhancementTower.Presentation
             showDamageNumbers = GUI.Toggle(new Rect(130, 430, 100, 30), showDamageNumbers, "Damage");
             playCombatSounds = GUI.Toggle(new Rect(245, 430, 110, 30), playCombatSounds, "Sound");
             showAttackArea = GUI.Toggle(new Rect(12, 462, 160, 30), showAttackArea, "Attack area");
+            bool fastEnemies = GUI.Toggle(new Rect(12, 494, 180, 30), includeFastMonsters, "Include fast foes");
+            if (fastEnemies != includeFastMonsters) { includeFastMonsters = fastEnemies; Restart(); }
+            GUI.Label(new Rect(12, 524, 400, 30), $"Roster: Normal {normalCount} | Fast {fastCount} | Heavy {heavyCount}");
             GUI.Label(new Rect(12, 12, 400, 30), $"Hero {simulation.Hero.Health}/{heroHealth}  {simulation.Hero.State}");
             GUI.Label(new Rect(12, 40, 400, 30), $"Enemies {simulation.LivingMonsters}/{simulation.Monsters.Count} | Swing hits: {simulation.Hero.LastHitCount}");
             if (!simulation.Hero.Alive || simulation.LivingMonsters == 0)

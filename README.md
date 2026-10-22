@@ -19,3 +19,6 @@ Unity 6 Universal 2D 프로젝트 `EnhancementTower`를 만든 다음, **이 패
 
 ## CombatPrototype 구현
 Unity 6000.6.4f1에서 `Assets/Scenes/CombatPrototype.unity`를 열고 Play합니다. 도형 기반 1~12마리 자동전투, 가까운 타겟 선택, 전방 최대 3명 베기와 강한 단일 찌르기 콤보, 개별 체력바, 고정 카메라와 Restart를 제공합니다. Inspector의 Monster Count 또는 실행 화면의 5/8/12 버튼으로 적 수를 바꿀 수 있습니다. Pressure reposition을 켜고 끄며 제한된 재배치를 비교할 수 있습니다. 이동·타겟은 점수 기반 확률로 선택하며 New seed each restart로 다른 전개/고정 재현을 비교합니다. 조건부 돌파와 적 위협에 따른 이동은 `CombatTactics.asset`에서 조절하며, Trap test로 포위 상황을 확인할 수 있습니다. 동작별 정적 데이터는 `Assets/Data/LongswordCombo.asset`에서 조절합니다. Hit sparks / Damage / Sound / Attack area로 적중 피드백과 판정 안내를 비교할 수 있습니다. `Assets/Data/CombatDamage.asset`에서 피해 범위·치명타 확률/배수·영웅/몬스터 방어력을 조절합니다. 크리티컬은 큰 분홍색 CRIT 숫자로 표시합니다. 구현 가정과 테스트 절차는 [docs/26_COMBAT_PROTOTYPE.md](docs/26_COMBAT_PROTOTYPE.md)를 참조하세요.
+
+
+일반(빨강)·빠른 약체(노란 작은 마름모)·강한 근접(보라 큰 직사각형)을 섞어 비교합니다. **Include fast foes**로 빠른 적을 켜고 끄면 전투가 재시작됩니다. `Assets/Data/FastMonster.asset`에서 빠른 적의 체력/공격력 배율과 접근/공격 준비 속도를 조절합니다. Mixed Threats를 끄면 전부 일반 적입니다. 영웅 콤보/공속 성장 설정은 추가하지 않았습니다.

@@ -932,4 +932,108 @@ public class CombatSimulationTests
         Assert.AreEqual(a.MovementChoices, b.MovementChoices);
         Assert.AreEqual(a.TargetChoices, b.TargetChoices);
     }
+
+    [Test]
+    public void FastEnemyIsWeakerAndClosesDistanceSoonerWithoutChangingReach()
+    {
+        var settings = new FastMonsterSettings();
+        var fast = settings.Create(new Point(0, 3), 60, 6, 0, new DamageProfile());
+        var normal = new Fighter(new Point(0, 3), 60, 6, 1.4f, 0.85f, 0.3f, 0.7f);
+        Assert.AreEqual(36, fast.MaxHealth); Assert.AreEqual(4, fast.Damage);
+        Assert.AreEqual(normal.Range, fast.Range); Assert.Greater(fast.Speed, normal.Speed);
+        var a = new CombatSimulation(new Fighter(new Point(), 500, 1, 0, 0.85f), fast);
+        var b = new CombatSimulation(new Fighter(new Point(), 500, 1, 0, 0.85f), normal);
+        a.Advance(0.75); b.Advance(0.75);
+        Assert.Less(fast.Position.Y, normal.Position.Y);
+        Assert.GreaterOrEqual((a.Hero.Position - fast.Position).Length, CombatSimulation.FootRadius * 2 - 0.00001f);
+    }
+    [Test]
+    public void FastEnemyLowStatsAndTrapHealthFloorRemainValid()
+    {
+        var settings = new FastMonsterSettings();
+        var tiny = settings.Create(new Point(), 1, 1, 2, new DamageProfile());
+        Assert.AreEqual(1, tiny.Health); Assert.AreEqual(1, tiny.Damage); Assert.AreEqual(2, tiny.Defense);
+        var trapped = settings.Create(new Point(), 60, 6, 0, new DamageProfile(), 120);
+        Assert.AreEqual(120, trapped.Health);
+        trapped.Position = new Point(1, 1);
+        Assert.AreEqual(36, settings.Create(new Point(), 60, 6, 0, null).Health);
+    }
+    [Test]
+    public void FastEnemyRejectsInvalidSettings()
+    {
+        Assert.Throws<System.ArgumentOutOfRangeException>(() => new FastMonsterSettings(speed: float.NaN));
+        Assert.Throws<System.ArgumentOutOfRangeException>(() => new FastMonsterSettings(healthScale: 0));
+        Assert.Throws<System.ArgumentOutOfRangeException>(() => new FastMonsterSettings(damageScale: 2));
+        Assert.Throws<System.ArgumentOutOfRangeException>(() => new FastMonsterSettings(recovery: -1));
+    }
+    [Test]
+    public void MixedRosterPreservesHeavySlotsAndCanDisableFastOrAllVariants()
+    {
+        int normal = 0, fast = 0, heavy = 0;
+        for (int i = 0; i < 12; i++)
+        {
+            var kind = FastMonsterSettings.KindAt(i, true, true);
+            if (kind == PrototypeMonsterKind.Normal) normal++;
+            if (kind == PrototypeMonsterKind.Fast) fast++;
+            if (kind == PrototypeMonsterKind.Heavy) heavy++;
+            Assert.AreEqual(i % 4 == 3 ? PrototypeMonsterKind.Heavy : PrototypeMonsterKind.Normal,
+                FastMonsterSettings.KindAt(i, true, false));
+            Assert.AreEqual(PrototypeMonsterKind.Normal, FastMonsterSettings.KindAt(i, false, true));
+        }
+        Assert.AreEqual(6, normal); Assert.AreEqual(3, fast); Assert.AreEqual(3, heavy);
+    }
+    private static CombatSimulation ThreeTypeBattle(int count, int seed)
+    {
+        Point[] offsets = { new Point(0, 0), new Point(-1.25f, -0.25f), new Point(0.7f, 0.85f),
+            new Point(-1.65f, 1.2f), new Point(-0.25f, 1.65f), new Point(-2.35f, 0.25f),
+            new Point(0.95f, 1.75f), new Point(-0.65f, 0.55f), new Point(-2.4f, 1.9f),
+            new Point(0.3f, 0.4f), new Point(-1.15f, 2.05f), new Point(-1.9f, -0.1f) };
+        var enemies = new Fighter[count]; var fast = new FastMonsterSettings();
+        var damage = new DamageProfile(0.85f, 1.15f, 0.05f);
+        for (int i = 0; i < count; i++)
+        {
+            Point position = new Point(0.8f, 1.8f) + offsets[i];
+            var kind = FastMonsterSettings.KindAt(i, true, true);
+            bool heavy = kind == PrototypeMonsterKind.Heavy;
+            enemies[i] = kind == PrototypeMonsterKind.Fast ? fast.Create(position, 60, 6, 0, damage) :
+                new Fighter(position, 60, heavy ? 9 : 6, heavy ? 1.05f : 1.4f, 0.85f,
+                    heavy ? 0.5f : 0.3f, heavy ? 0.9f : 0.7f, heavy ? 3 : 0, heavy ? 1.8f : 1, damage);
+        }
+        return new CombatSimulation(new Fighter(new Point(-0.7f, -1.8f), 500, 12, 1.9f, 0.85f,
+            defense: 1, damageProfile: new DamageProfile(0.85f, 1.15f, 0.15f)), enemies, null,
+            knockbackDistance: 0.3f, tactics: new TacticalSettings(movementTemperature: 0.35f, targetTemperature: 0.55f), seed: seed);
+    }
+    [TestCase(5, 3)]
+    [TestCase(8, 12345)]
+    [TestCase(12, 73)]
+    public void ThreeMonsterTypesStayBoundedFinishAndReplay(int count, int seed)
+    {
+        var a = ThreeTypeBattle(count, seed); var b = ThreeTypeBattle(count, seed);
+        for (int frame = 0; frame < 3600; frame++)
+        {
+            a.Advance(1.0 / 30);
+            for (int i = 0; i < count; i++)
+            {
+                var enemy = a.Monsters[i];
+                Assert.That(enemy.Position.X, Is.InRange(-2f, 2f));
+                Assert.That(enemy.Position.Y, Is.InRange(-3f, 4f));
+                if (a.Hero.Alive && enemy.Alive)
+                    Assert.GreaterOrEqual((a.Hero.Position - enemy.Position).Length, CombatSimulation.FootRadius * 2 - 0.00001f);
+            }
+            Assert.GreaterOrEqual(a.Hero.Position.Y, a.RetreatFloor);
+        }
+        for (int frame = 0; frame < 14400; frame++) b.Advance(1.0 / 120);
+        Assert.IsTrue(!a.Hero.Alive || a.LivingMonsters == 0);
+        Assert.Greater(a.Hero.Attacks, 3);
+        Assert.AreEqual(a.Hero.Health, b.Hero.Health);
+        Assert.AreEqual(a.Hero.Position.X, b.Hero.Position.X);
+        Assert.AreEqual(a.Hero.Position.Y, b.Hero.Position.Y);
+        for (int i = 0; i < count; i++)
+        {
+            Assert.AreEqual(a.Monsters[i].Health, b.Monsters[i].Health);
+            Assert.AreEqual(a.Monsters[i].CriticalHitsTaken, b.Monsters[i].CriticalHitsTaken);
+            Assert.AreEqual(a.Monsters[i].Position.X, b.Monsters[i].Position.X);
+            Assert.AreEqual(a.Monsters[i].Position.Y, b.Monsters[i].Position.Y);
+        }
+    }
 }

@@ -17,6 +17,7 @@
 - 2026-10-22 USER-APPROVED: add configurable minimum/maximum damage, critical chance/multiplier and per-defender DEF to the prototype. Victim geometry and target caps remain unchanged. Each eligible hit rolls independently using a seeded damage stream separate from tactical choices; equal slash base coefficients do not guarantee identical final damage.
 
 ## PROTOTYPE ASSUMPTIONS, NOT LOCKED NUMBERS
+- Fast melee prototype: shared ground AI/foot collision, lower HP/damage, higher approach speed, shorter windup; configurable `FastMonster.asset`. Normal → Fast → Normal → Heavy is an authored comparison roster, not final stage composition. No flying/phasing or new hero attack-speed progression is implied.
 - Damage variance 85–115%, hero/monster critical chance 15%/5%, critical multiplier 1.5, DEF hero/normal/heavy 1/0/3. Integer uniform roll → action/critical multipliers → rounding → flat DEF subtraction → minimum 1 is provisional, not the final progression formula.
 - 60-sec challenge / 50 kills / concurrent ~5 (stress-test 8 and 12), 1-second contact interval per monster, starting ASPD 1.0–1.1/s, S1 cap ~1.5/s.
 - Per-action slash/thrust angles, reach, active windows, combo ordering and damage/knockback multipliers, hit-stop frames, knockback meters, boss charge speed, AI search/reposition cooldown, boundary shape and camera follow threshold.

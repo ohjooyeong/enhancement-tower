@@ -157,6 +157,7 @@ MonoBehaviour:
   tacticsDefinition: {fileID: 11400000, guid: 47d174713867d479f89395583ddf7474, type: 2}
   comboDefinition: {fileID: 11400000, guid: c04377f66e74442f99eabca8c8ca7242, type: 2}
   damageDefinition: {fileID: 11400000, guid: 5a2186c30554e433d870611316ac419d, type: 2}
+  fastMonsterDefinition: {fileID: 11400000, guid: 4e71bb3ae1e8f4e5899caf67d98dd044, type: 2}
 --- !u!4 &505755048
 Transform:
   m_ObjectHideFlags: 0
