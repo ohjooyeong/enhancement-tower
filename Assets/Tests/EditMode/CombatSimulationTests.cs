@@ -3,6 +3,143 @@ using NUnit.Framework;
 
 public class CombatSimulationTests
 {
+    private static CombatSimulation BossBattle(float heroSpeed = 1.9f)
+    {
+        var battle = new CombatSimulation(new Fighter(new Point(0, -1), 10000, 1, heroSpeed, 0.85f),
+            new Fighter(new Point(0, 2), 10000, 6, 0, 0.85f));
+        battle.EnableChargeBoss(battle.Monster);
+        return battle;
+    }
+    [Test]
+    public void ChargeLocksPathPassesDodgingHeroAndReengages()
+    {
+        var battle = BossBattle();
+        while (battle.BossPhase != ChargePhase.Telegraph) battle.Advance(CombatSimulation.Tick);
+        Point end = battle.ChargeEnd;
+        bool passed = false;
+        for (int i = 0; i < 420; i++)
+        {
+            battle.Advance(CombatSimulation.Tick);
+            Assert.GreaterOrEqual((battle.Hero.Position - battle.Monster.Position).Length, 0.559f);
+            if (battle.BossPhase != ChargePhase.Ready)
+            { Assert.AreEqual(end.X, battle.ChargeEnd.X); Assert.AreEqual(end.Y, battle.ChargeEnd.Y); }
+            if (battle.Monster.Position.Y < battle.Hero.Position.Y) passed = true;
+            if (battle.Charges > 0 && battle.BossPhase == ChargePhase.Ready) break;
+        }
+        Assert.IsTrue(passed);
+        Assert.Greater(battle.Hero.Attacks, 0);
+        Assert.Greater(battle.BossSweeps, 0);
+    }
+    [Test]
+    public void BlockedChargeHitsOnceAndCannotTunnelThroughHero()
+    {
+        var battle = BossBattle(0);
+        for (int i = 0; i < 600 && battle.BossPhase != ChargePhase.Recovery; i++) battle.Advance(CombatSimulation.Tick);
+        Assert.AreEqual(1, battle.Hero.HitsTaken);
+        Assert.GreaterOrEqual((battle.Hero.Position - battle.Monster.Position).Length, 0.559f);
+        Assert.Greater(battle.Monster.Position.Y, battle.Hero.Position.Y);
+    }
+    [Test]
+    public void BossRenderIntervalsProduceIdenticalResults()
+    {
+        var a = BossBattle(); var b = BossBattle();
+        for (int i = 0; i < 300; i++) a.Advance(1.0 / 30);
+        for (int i = 0; i < 1200; i++) b.Advance(1.0 / 120);
+        Assert.AreEqual(a.Hero.Health, b.Hero.Health);
+        Assert.AreEqual(a.Monster.Position.X, b.Monster.Position.X);
+        Assert.AreEqual(a.Hero.Position.Y, b.Hero.Position.Y);
+        Assert.AreEqual(a.Charges, b.Charges);
+    }
+    [Test]
+    public void ChargeEndpointStaysOnDiagonalAndInsideArena()
+    {
+        var battle = new CombatSimulation(new Fighter(new Point(1.8f, -2.8f), 10000, 1, 0, 0.85f),
+            new Fighter(new Point(-1.7f, 2), 10000, 1, 0, 0.85f));
+        battle.EnableChargeBoss(battle.Monster, distance: 20);
+        while (battle.BossPhase != ChargePhase.Telegraph) battle.Advance(CombatSimulation.Tick);
+        Point path = battle.ChargeEnd - battle.ChargeOrigin;
+        Point aim = battle.Hero.Position - battle.ChargeOrigin;
+        Assert.AreEqual(0, path.X * aim.Y - path.Y * aim.X, 0.0001f);
+        Assert.That(battle.ChargeEnd.X, Is.InRange(-2f, 2f));
+        Assert.That(battle.ChargeEnd.Y, Is.InRange(-3f, 4f));
+        Assert.Throws<System.ArgumentException>(() => battle.EnableChargeBoss(battle.Monster));
+    }
+    [Test]
+    public void BossSweepLocksFacingAndHitsOnlyOnceDuringActiveWindow()
+    {
+        var battle = BossBattle();
+        for (int i = 0; i < 1200 && battle.BossPhase != ChargePhase.Sweep; i++) battle.Advance(CombatSimulation.Tick);
+        Assert.AreEqual(ChargePhase.Sweep, battle.BossPhase);
+        Point aim = battle.Monster.AttackAim;
+        // Position a stationary target in the authored forward sector for the whole action.
+        battle.Hero.Position = battle.Monster.Position + aim * 0.7f;
+        int hits = battle.Hero.HitsTaken;
+        for (int i = 0; i < 90 && battle.BossPhase == ChargePhase.Sweep; i++)
+        {
+            battle.Advance(CombatSimulation.Tick);
+            Assert.AreEqual(aim.X, battle.Monster.AttackAim.X);
+            Assert.AreEqual(aim.Y, battle.Monster.AttackAim.Y);
+        }
+        Assert.AreEqual(hits + 1, battle.Hero.HitsTaken);
+        Assert.AreEqual(1, battle.BossSweeps);
+        Assert.AreEqual(AttackKind.BossSweep, battle.Hero.LastHitKind);
+    }
+    [Test]
+    public void SweepDoesNotHitBehindOrBeyondItsRange()
+    {
+        foreach (bool behind in new[] { true, false })
+        {
+            var battle = BossBattle(0);
+            for (int i = 0; i < 1200 && battle.BossPhase != ChargePhase.Sweep; i++) battle.Advance(CombatSimulation.Tick);
+            Assert.AreEqual(ChargePhase.Sweep, battle.BossPhase);
+            Point aim = battle.Monster.AttackAim;
+            battle.Hero.Position = battle.Monster.Position + aim * (behind ? -0.7f : battle.BossSweepRange + 0.3f);
+            int hits = battle.Hero.HitsTaken;
+            while (battle.BossPhase == ChargePhase.Sweep) battle.Advance(CombatSimulation.Tick);
+            Assert.AreEqual(hits, battle.Hero.HitsTaken);
+        }
+    }
+    [Test]
+    public void HalfHealthChangesTempoWithoutChangingChargeGeometry()
+    {
+        var normal = BossBattle(0); var enraged = BossBattle(0);
+        enraged.Monster.Health = enraged.Monster.MaxHealth / 2;
+        Assert.IsTrue(enraged.BossEnraged);
+        int normalWarning = 0, fastWarning = 0;
+        for (int i = 0; i < 400; i++)
+        {
+            normal.Advance(CombatSimulation.Tick); enraged.Advance(CombatSimulation.Tick);
+            if (normal.BossPhase == ChargePhase.Telegraph) normalWarning++;
+            if (enraged.BossPhase == ChargePhase.Telegraph) fastWarning++;
+        }
+        Assert.Less(fastWarning, normalWarning);
+        Assert.AreEqual(normal.ChargeEnd.X, enraged.ChargeEnd.X);
+        Assert.AreEqual(normal.ChargeEnd.Y, enraged.ChargeEnd.Y);
+    }
+    [TestCase(3)]
+    [TestCase(71)]
+    [TestCase(804)]
+    public void MobilePrototypeBossMaintainsMeleePressureAndRepeatedPattern(int seed)
+    {
+        var hero = new Fighter(new Point(-0.7f, -1.8f), 10000, 12, 1.9f, 0.85f);
+        var boss = new Fighter(new Point(0.8f, 1.8f), 10000, 10, 1.55f, 0.85f, 0.32f, 0.48f, defense: 3);
+        var battle = new CombatSimulation(hero, new[] { boss }, null,
+            tactics: new TacticalSettings(movementTemperature: 0.35f, targetTemperature: 0.55f), seed: seed);
+        battle.EnableChargeBoss(boss);
+        int meleeHits = 0, lastHits = 0;
+        for (int i = 0; i < 1800; i++)
+        {
+            battle.Advance(CombatSimulation.Tick);
+            if (hero.HitsTaken > lastHits && hero.LastHitKind == AttackKind.MonsterStrike) meleeHits++;
+            lastHits = hero.HitsTaken;
+            Assert.GreaterOrEqual((hero.Position - boss.Position).Length, 0.559f);
+            Assert.GreaterOrEqual(hero.Position.Y, battle.RetreatFloor - 0.0001f);
+        }
+        Assert.Greater(meleeHits, 0, "Melee must apply pressure between large patterns.");
+        Assert.GreaterOrEqual(battle.Charges, 2);
+        Assert.GreaterOrEqual(battle.BossSweeps, 2);
+        Assert.Greater(hero.Attacks, 5, "Boss must leave opportunities to fight back.");
+    }
     private static CombatSimulation Battle() => new CombatSimulation(
         new Fighter(new Point(-0.7f, -1.8f), 100, 12, 1.9f, 0.85f),
         new Fighter(new Point(0.8f, 1.8f), 60, 6, 1.4f, 0.85f));

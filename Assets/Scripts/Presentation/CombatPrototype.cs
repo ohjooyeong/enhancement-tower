@@ -41,7 +41,12 @@ namespace EnhancementTower.Presentation
         private LineRenderer attackArea;
         [SerializeField, Range(0, 1)] private float combatVolume = 0.18f;
         private PrototypeCombatFeedback feedback;
-        private bool wallTest, trapTest;
+        private bool wallTest, trapTest, bossMode;
+        [SerializeField, Min(1)] private int bossHealth = 600;
+        [SerializeField, Min(0.1f)] private float bossTelegraph = 1.1f;
+        [SerializeField, Min(0.1f)] private float bossChargeSpeed = 5, bossChargeDistance = 3.2f;
+        private SpriteRenderer chargeWarning;
+        private LineRenderer sweepWarning;
         private CombatSimulation simulation;
         private Sprite square;
         private Texture2D texture;
@@ -78,14 +83,27 @@ namespace EnhancementTower.Presentation
         }
         private void Restart()
         {
+            if (chargeWarning == null)
+                chargeWarning = MakeSprite("Charge warning", transform, Vector3.zero, Vector2.one, new Color(1, 0.3f, 0.1f, 0.3f), -500);
+            chargeWarning.enabled = false;
+            if (sweepWarning == null)
+            {
+                var guide = new GameObject("Boss sweep area"); guide.transform.SetParent(transform, false);
+                sweepWarning = guide.AddComponent<LineRenderer>(); sweepWarning.useWorldSpace = false;
+                sweepWarning.sharedMaterial = chargeWarning.sharedMaterial;
+                sweepWarning.positionCount = 22; sweepWarning.startWidth = sweepWarning.endWidth = 0.035f;
+                sweepWarning.startColor = sweepWarning.endColor = new Color(1, 0.45f, 0.15f, 0.8f);
+                sweepWarning.sortingOrder = -490;
+            }
+            sweepWarning.enabled = false;
             feedback.ResetRun(); feedback.Reset(heroView.Feedback);
             if (monsterViews != null)
                 for (int i = 0; i < monsterViews.Length; i++)
                     if (monsterViews[i] != null) Destroy(monsterViews[i].Root.gameObject);
             stage = null;
-            bool finite = stageMode && !wallTest && !trapTest;
+            bool finite = stageMode && !bossMode && !wallTest && !trapTest;
             StageSettings stageSettings = finite ? (stageDefinition != null ? stageDefinition.Snapshot() : new StageSettings()) : null;
-            int count = finite ? stageSettings.Total : trapTest ? 8 : wallTest ? 3 : Mathf.Clamp(monsterCount, 1, 12);
+            int count = bossMode ? 1 : finite ? stageSettings.Total : trapTest ? 8 : wallTest ? 3 : Mathf.Clamp(monsterCount, 1, 12);
             Vector2 playerStart = trapTest ? new Vector2(0, -1.5f) : wallTest ? new Vector2(-2, -2) : heroStart;
             monsterViews = new ActorView[count]; monsterKinds = new PrototypeMonsterKind[count];
             normalCount = fastCount = heavyCount = 0;
@@ -101,6 +119,12 @@ namespace EnhancementTower.Presentation
             bool trap = trapTest;
             Fighter CreateEnemy(int index, Point position)
             {
+                if (bossMode)
+                {
+                    monsterKinds[index] = PrototypeMonsterKind.Heavy; heavyCount++;
+                    return new Fighter(position, bossHealth, Mathf.Max(1, Mathf.RoundToInt(baseDamage * 1.6f)), 1.55f, 0.85f, 0.32f, 0.48f,
+                        defense: heavyDefense, damageProfile: enemyRules);
+                }
                 PrototypeMonsterKind kind = monsterKinds[index] = FastMonsterSettings.KindAt(index, mixed, includeFast);
                 bool strong = kind == PrototypeMonsterKind.Heavy;
                 if (kind == PrototypeMonsterKind.Fast)
@@ -128,6 +152,7 @@ namespace EnhancementTower.Presentation
                 new RepositionSettings(enableReposition, pressureThreshold, repositionDistance, repositionCooldown, retreatDistance), trapTest ? 0 : knockbackDistance,
                 tacticsDefinition != null ? tacticsDefinition.Snapshot() : new TacticalSettings(movementTemperature: 0.35f, targetTemperature: 0.55f),
                 seed, finite ? count : 0);
+            if (bossMode) simulation.EnableChargeBoss(monsters[0], bossTelegraph, bossChargeSpeed, bossChargeDistance);
             if (finite) stage = new StageEncounter(simulation, stageSettings, CreateEnemy);
             SyncMonsterViews();
         }
@@ -176,6 +201,29 @@ namespace EnhancementTower.Presentation
             if (stage != null) stage.Advance(Time.deltaTime); else simulation.Advance(Time.deltaTime);
             SyncMonsterViews();
             // Preserve the entire field on narrow portrait displays, with a fixed orientation.
+            chargeWarning.enabled = bossMode && simulation.Hero.Alive && simulation.Monster.Alive &&
+                (simulation.BossPhase == ChargePhase.Telegraph || simulation.BossPhase == ChargePhase.Charging);
+            if (chargeWarning.enabled)
+            {
+                Point a = simulation.ChargeOrigin, b = simulation.ChargeEnd, d = b - a;
+                chargeWarning.transform.localPosition = new Vector3((a.X + b.X) * 0.5f, (a.Y + b.Y) * 0.5f, 0);
+                chargeWarning.transform.localRotation = Quaternion.Euler(0, 0, Mathf.Atan2(d.Y, d.X) * Mathf.Rad2Deg);
+                chargeWarning.transform.localScale = new Vector3(d.Length, CombatSimulation.FootRadius * 4, 1);
+            }
+            sweepWarning.enabled = bossMode && simulation.Hero.Alive && simulation.Monster.Alive && simulation.BossPhase == ChargePhase.Sweep;
+            if (sweepWarning.enabled)
+            {
+                Fighter boss = simulation.ChargeBoss;
+                float heading = Mathf.Atan2(boss.AttackAim.Y, boss.AttackAim.X);
+                sweepWarning.transform.localPosition = new Vector3(boss.Position.X, boss.Position.Y, 0);
+                sweepWarning.SetPosition(0, Vector3.zero);
+                for (int i = 0; i < 20; i++)
+                {
+                    float angle = heading + Mathf.Deg2Rad * Mathf.Lerp(-CombatSimulation.BossSweepArc * 0.5f, CombatSimulation.BossSweepArc * 0.5f, i / 19f);
+                    sweepWarning.SetPosition(i + 1, new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0) * simulation.BossSweepRange);
+                }
+                sweepWarning.SetPosition(21, Vector3.zero);
+            }
             viewCamera.orthographicSize = Mathf.Max(4.7f, 2.65f / viewCamera.aspect);
             feedback.Effects = showHitEffects; feedback.Numbers = showDamageNumbers;
             feedback.Sound = playCombatSounds; feedback.Volume = combatVolume;
@@ -269,8 +317,11 @@ namespace EnhancementTower.Presentation
             GUI.Label(new Rect(12, 524, 400, 30), $"Roster: Normal {normalCount} | Fast {fastCount} | Heavy {heavyCount}");
             GUI.Label(new Rect(12, 12, 400, 30), $"Hero {simulation.Hero.Health}/{heroHealth}  {simulation.Hero.State}");
             GUI.Label(new Rect(12, 40, 400, 30), $"Enemies {simulation.LivingMonsters}/{simulation.Monsters.Count} | Swing hits: {simulation.Hero.LastHitCount}");
+            if (GUI.Button(new Rect(160, 558, 140, 32), "Charge boss"))
+            { bossMode = true; stageMode = trapTest = wallTest = false; Restart(); }
+            if (bossMode) GUI.Label(new Rect(12, 594, 500, 30), $"Boss: {simulation.BossPhase} | Charge {simulation.Charges} / Sweep {simulation.BossSweeps} {(simulation.BossEnraged ? "ENRAGED" : "")}");
             if (GUI.Button(new Rect(12, 558, 140, 32), "Stage run"))
-            { stageMode = true; trapTest = wallTest = false; Restart(); }
+            { bossMode = false; stageMode = true; trapTest = wallTest = false; Restart(); }
             if (stage != null)
             {
                 GUI.Label(new Rect(12, 594, 500, 30), $"Kills {stage.Kills}/{stage.Settings.Total} | Pending {stage.Pending} | Time {stage.SecondsRemaining:F1}s");
@@ -291,11 +342,11 @@ namespace EnhancementTower.Presentation
                 (simulation.Hero.Target.Position - simulation.Hero.Position).Length;
             GUI.Label(new Rect(12, 248, 500, 30), $"Hero attacks {simulation.Hero.Attacks} | Target distance {targetDistance:F3}");
             if (GUI.Button(new Rect(12, 128, 100, 38), "Restart")) Restart();
-            if (GUI.Button(new Rect(118, 128, 70, 38), "5 foes")) { stageMode = false; trapTest = false; wallTest = false; monsterCount = 5; Restart(); }
-            if (GUI.Button(new Rect(194, 128, 70, 38), "8 foes")) { stageMode = false; trapTest = false; wallTest = false; monsterCount = 8; Restart(); }
-            if (GUI.Button(new Rect(270, 128, 70, 38), "12 foes")) { stageMode = false; trapTest = false; wallTest = false; monsterCount = 12; Restart(); }
-            if (GUI.Button(new Rect(270, 176, 90, 30), "Wall test")) { stageMode = false; trapTest = false; wallTest = true; Restart(); }
-            if (GUI.Button(new Rect(270, 350, 90, 30), "Trap test")) { stageMode = false; wallTest = false; trapTest = true; Restart(); }
+            if (GUI.Button(new Rect(118, 128, 70, 38), "5 foes")) { bossMode = false; stageMode = false; trapTest = false; wallTest = false; monsterCount = 5; Restart(); }
+            if (GUI.Button(new Rect(194, 128, 70, 38), "8 foes")) { bossMode = false; stageMode = false; trapTest = false; wallTest = false; monsterCount = 8; Restart(); }
+            if (GUI.Button(new Rect(270, 128, 70, 38), "12 foes")) { bossMode = false; stageMode = false; trapTest = false; wallTest = false; monsterCount = 12; Restart(); }
+            if (GUI.Button(new Rect(270, 176, 90, 30), "Wall test")) { bossMode = false; stageMode = false; trapTest = false; wallTest = true; Restart(); }
+            if (GUI.Button(new Rect(270, 350, 90, 30), "Trap test")) { bossMode = false; stageMode = false; wallTest = false; trapTest = true; Restart(); }
             bool reposition = GUI.Toggle(new Rect(12, 176, 260, 30), enableReposition, "Pressure reposition");
             if (reposition != enableReposition) { enableReposition = reposition; Restart(); }
         }

@@ -44,3 +44,10 @@
 - Any older suggestion that the hero must always show their back is **rejected**; turn to target without rotating camera.
 - Old 'boss doesn't move' or 'boss separate view' are superseded for first charge-boss prototype; ultimate boss roster remains open.
 - Source order: this file > `23_COMBAT_PRESENTATION_2026_10.md` (camera/combat) > `04_COMBAT.md`, `05_AUTO_POSITIONING.md` and canonical GDD > older supplements/ADR. If there is a contradiction outside combat, preserve core GDD pending discussion.
+
+## 2026-10-23 charge-boss prototype assumptions
+- First implementation uses fixed warning/path, existing swept foot collision, stop-and-hit once on blocked charge (2.5x), recovery 1.1s/cooldown4s, maximum sidestep .8 and full boss knockback resistance. Warning1.1s/speed5/distance3.2 are configurable. These are prototype defaults, not newly locked design. Boss comparison mode does not yet include stage timeout/rewards. See 26_COMBAT_PROTOTYPE.md.
+
+## 2026-10-23 USER-APPROVED boss pressure cycle
+- User approved strengthening the first boss with melee pressure → fixed linear charge → short punish window → turn/reacquire → forward sweep → melee, plus faster tempo below half HP. Keep the existing camera, bounded foot collision, action locks and no guaranteed dodge.
+- Prototype defaults superseding the earlier recovery/cooldown defaults: post-charge opening .55s, reacquire up to2s, sweep150 degrees/range1.55x/windup.4s/active.16s/recovery.65s/damage1.8x (one hit per action). Normal melee1.5x; scene boss base damage1.6x normal, movement1.55, normal windup/recovery.32/.48s. Initial charge wait3s; later wait3.4s. Half HP: warning.8x, melee timing.85x, sweep windup.32s, later charge wait2.6s. Timing is captured when an action begins. These numbers remain tuning assumptions, not final balance.

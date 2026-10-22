@@ -3,7 +3,8 @@ using System.Collections.Generic;
 
 namespace EnhancementTower.Combat
 {
-    public enum CombatState { Search, Approach, Attack, Reposition, Dead, BreakthroughAdvance }
+    public enum CombatState { Search, Approach, Attack, Reposition, Dead, BreakthroughAdvance, AvoidTelegraph }
+    public enum ChargePhase { Ready, Telegraph, Charging, Recovery, Reacquire, Sweep, SweepRecovery }
 
     // Value coordinates keep the simulation independent of Unity physics and render frames.
     public struct Point
@@ -17,7 +18,7 @@ namespace EnhancementTower.Combat
         public static Point operator *(Point a, float b) => new Point(a.X * b, a.Y * b);
     }
 
-    public enum AttackKind { DiagonalSlash, ReverseSlash, Thrust, MonsterStrike, Breakthrough }
+    public enum AttackKind { DiagonalSlash, ReverseSlash, Thrust, MonsterStrike, Breakthrough, BossCharge, BossSweep }
 
     public readonly struct AttackStep
     {
@@ -130,6 +131,146 @@ namespace EnhancementTower.Combat
         public const float FootRadius = 0.28f;
         private const float RangeTolerance = 0.0001f;
         public readonly Fighter Hero;
+        public Fighter ChargeBoss { get; private set; }
+        public ChargePhase BossPhase { get; private set; }
+        public Point ChargeOrigin { get; private set; }
+        public Point ChargeEnd { get; private set; }
+        public int Charges { get; private set; }
+        public int BossSweeps { get; private set; }
+        public bool BossEnraged => ChargeBoss != null && ChargeBoss.Health <= ChargeBoss.MaxHealth / 2;
+        public float BossSweepRange => ChargeBoss == null ? 0 : ChargeBoss.Range * 1.55f;
+        public const float BossSweepArc = 150;
+        private float chargeTime, chargeRemaining, chargeCooldown = 3;
+        private bool sweepHit, sweepStarted;
+        private Point chargeAim, dodgeGoal;
+        private bool dodgeChosen;
+        private float telegraphSeconds, chargeSpeed, chargeDistance;
+        public void EnableChargeBoss(Fighter boss, float telegraph = 1.1f, float speed = 5, float distance = 3.2f)
+        {
+            float sum = telegraph + speed + distance;
+            if (Ticks != 0 || boss == null || !enemies.Contains(boss) || ChargeBoss != null ||
+                float.IsNaN(sum) || float.IsInfinity(sum) || telegraph < 0.1f || speed <= 0 || distance <= 0)
+                throw new ArgumentException("Invalid boss configuration or simulation already started.");
+            ChargeBoss = boss; telegraphSeconds = telegraph; chargeSpeed = speed; chargeDistance = distance;
+        }
+        private bool StepChargeBoss()
+        {
+            if (ChargeBoss == null || !ChargeBoss.Alive || !Hero.Alive) return false;
+            Fighter boss = ChargeBoss;
+            chargeCooldown = Math.Max(0, chargeCooldown - Tick);
+            if (BossPhase == ChargePhase.Ready)
+            {
+                if (chargeCooldown > 0 || boss.State == CombatState.Attack) return false;
+                ChargeOrigin = boss.Position; chargeAim = (Hero.Position - boss.Position).Normalized;
+                float length = chargeDistance;
+                if (chargeAim.X > 0) length = Math.Min(length, (2 - ChargeOrigin.X) / chargeAim.X);
+                if (chargeAim.X < 0) length = Math.Min(length, (-2 - ChargeOrigin.X) / chargeAim.X);
+                if (chargeAim.Y > 0) length = Math.Min(length, (4 - ChargeOrigin.Y) / chargeAim.Y);
+                if (chargeAim.Y < 0) length = Math.Min(length, (-3 - ChargeOrigin.Y) / chargeAim.Y);
+                ChargeEnd = ChargeOrigin + chargeAim * length;
+                chargeRemaining = (ChargeEnd - ChargeOrigin).Length;
+                boss.Aim = boss.AttackAim = chargeAim;
+                boss.CurrentAttack = new AttackStep(AttackKind.BossCharge, 1, telegraphSeconds * (BossEnraged ? 0.8f : 1), 0.1f, 0.5f, 180, 1, 2.5f, 0);
+                boss.State = CombatState.Search;
+                BossPhase = ChargePhase.Telegraph; chargeTime = 0; dodgeChosen = false;
+            }
+            boss.Movement = new Point();
+            boss.HitFlash = Math.Max(0, boss.HitFlash - Tick);
+            boss.SlashTime = Math.Max(0, boss.SlashTime - Tick);
+            chargeTime += Tick;
+            if (BossPhase == ChargePhase.Telegraph && chargeTime >= boss.CurrentAttack.Windup)
+            { BossPhase = ChargePhase.Charging; chargeTime = 0; Charges++; }
+            else if (BossPhase == ChargePhase.Charging)
+            {
+                Point before = boss.Position;
+                float distance = Math.Min(chargeRemaining, chargeSpeed * Tick);
+                boss.Position = MoveWithoutCrossing(boss, Clamp(before + chargeAim * distance));
+                float moved = (boss.Position - before).Length;
+                boss.Movement = (boss.Position - before) * (1f / Tick);
+                chargeRemaining -= moved;
+                bool blocked = moved + 0.0001f < distance;
+                if (blocked || chargeRemaining < 0.001f)
+                {
+                    if (blocked && (boss.Position - Hero.Position).Length <= FootRadius * 2 + 0.005f)
+                        DealHit(boss, Hero, 2.5f);
+                    BossPhase = ChargePhase.Recovery; chargeTime = 0;
+                }
+            }
+            else if (BossPhase == ChargePhase.Recovery && chargeTime >= 0.55f)
+            { BossPhase = ChargePhase.Reacquire; chargeTime = 0; }
+            else if (BossPhase == ChargePhase.Reacquire)
+            {
+                // Turn and close physical distance using the same swept feet as ordinary approach.
+                Point delta = Hero.Position - boss.Position;
+                boss.Aim = delta.Normalized;
+                if (delta.Length <= BossSweepRange || chargeTime >= 2)
+                {
+                    boss.AttackAim = boss.Aim; boss.PhaseTime = 0;
+                    boss.CurrentAttack = new AttackStep(AttackKind.BossSweep, 1, BossEnraged ? 0.32f : 0.4f,
+                        0.16f, 0.65f, BossSweepArc, 1.55f, 1.8f, 0);
+                    boss.State = CombatState.Attack; boss.LastHitCount = 0;
+                    BossPhase = ChargePhase.Sweep; chargeTime = 0; sweepHit = sweepStarted = false;
+                }
+                else
+                {
+                    Point before = boss.Position;
+                    boss.Position = MoveWithoutCrossing(boss, Clamp(before + boss.Aim * Math.Min(boss.Speed * Tick, delta.Length - BossSweepRange)));
+                    boss.Movement = (boss.Position - before) * (1f / Tick);
+                }
+            }
+            else if (BossPhase == ChargePhase.Sweep)
+            {
+                AttackStep step = boss.CurrentAttack;
+                boss.PhaseTime = chargeTime;
+                if (chargeTime >= step.Windup)
+                {
+                    if (!sweepStarted)
+                    { boss.SlashTime = step.Active; boss.Attacks++; BossSweeps++; sweepStarted = true; }
+                    if (chargeTime < step.Windup + step.Active && !sweepHit && InArc(boss.Position, boss.AttackAim, Hero.Position, BossSweepRange, BossSweepArc))
+                    { DealHit(boss, Hero, step.DamageScale); sweepHit = true; }
+                    if (chargeTime >= step.Windup + step.Active)
+                    { BossPhase = ChargePhase.SweepRecovery; chargeTime = 0; boss.State = CombatState.Reposition; }
+                }
+            }
+            else if (BossPhase == ChargePhase.SweepRecovery && chargeTime >= boss.CurrentAttack.Recovery)
+            { BossPhase = ChargePhase.Ready; chargeCooldown = BossEnraged ? 2.6f : 3.4f; boss.State = CombatState.Search; }
+            return true;
+        }
+        private bool AvoidCharge()
+        {
+            if (ChargeBoss == null || !ChargeBoss.Alive || !Hero.Alive ||
+                (BossPhase != ChargePhase.Telegraph && BossPhase != ChargePhase.Charging) ||
+                Hero.State == CombatState.Attack || Hero.State == CombatState.BreakthroughAdvance) return false;
+            if (!dodgeChosen)
+            {
+                dodgeChosen = true; dodgeGoal = Hero.Position;
+                Point side = new Point(-chargeAim.Y, chargeAim.X);
+                float best = 0;
+                Point first = Hero.Position, second = Hero.Position;
+                for (int sign = -1; sign <= 1; sign += 2)
+                {
+                    Point candidate = ReachableStep(Hero.Position, side * sign, 0.8f);
+                    Point offset = candidate - ChargeOrigin;
+                    float clearance = Math.Abs(offset.X * side.X + offset.Y * side.Y);
+                    if (sign < 0) first = candidate; else second = candidate;
+                    choiceScores[sign < 0 ? 0 : 1] = clearance >= FootRadius * 2 + 0.04f ? -clearance : double.PositiveInfinity;
+                    if (clearance > best) { best = clearance; dodgeGoal = candidate; }
+                }
+                if (Tactics.Enabled && Tactics.MovementTemperature > 0)
+                {
+                    int selected = WeightedIndex(2, Tactics.MovementTemperature);
+                    if (selected >= 0) dodgeGoal = selected == 0 ? first : second;
+                }
+                repositioning = false; hasRepositionNext = false;
+            }
+            Hero.State = CombatState.AvoidTelegraph;
+            Hero.Aim = (ChargeBoss.Position - Hero.Position).Normalized;
+            Point before = Hero.Position, delta = dodgeGoal - before;
+            if (delta.Length > 0.001f)
+                Hero.Position = MoveWithoutCrossing(Hero, Clamp(before + delta.Normalized * Math.Min(delta.Length, Hero.Speed * Tick)));
+            Hero.Movement = (Hero.Position - before) * (1f / Tick);
+            return true;
+        }
         // Compatibility with the original duel tests and callers.
         public Fighter Monster => enemies[0];
         private readonly List<Fighter> enemies;
@@ -287,8 +428,10 @@ namespace EnhancementTower.Combat
                 Pressure = NearbyCount(Hero.Position);
                 BreakthroughCooldown = Math.Max(0, BreakthroughCooldown - Tick);
                 UpdateConstraint();
+                bool bossActing = StepChargeBoss();
                 Step(Hero);
-                for (int i = 0; i < enemies.Count; i++) Step(enemies[i]);
+                for (int i = 0; i < enemies.Count; i++)
+                    if (!bossActing || enemies[i] != ChargeBoss) Step(enemies[i]);
                 SeparateMonsters();
                 ApplyKnockback();
                 Ticks++;
@@ -303,6 +446,11 @@ namespace EnhancementTower.Combat
             actor.HitFlash = Math.Max(0, actor.HitFlash - Tick);
             actor.SlashTime = Math.Max(0, actor.SlashTime - Tick);
             if (!actor.Alive) { actor.State = CombatState.Dead; actor.Target = null; return; }
+            if (actor == Hero)
+            {
+                if (AvoidCharge()) return;
+                if (actor.State == CombatState.AvoidTelegraph) actor.State = CombatState.Search;
+            }
             // Retain targets during approach/attack; reacquire between attacks or after death.
             bool keepSwingFocus = actor == Hero && actor.State == CombatState.Attack && actor.Target != null &&
                 !actor.Target.Alive && LivingMonsters > 0;
@@ -334,7 +482,8 @@ namespace EnhancementTower.Combat
                         actor.State = CombatState.Attack; actor.AttackAim = actor.Aim;
                         actor.PhaseTime = 0; actor.AttackTarget = target; actor.LastHitCount = 0;
                         actor.CurrentAttack = actor == Hero ? combo[actor.ComboIndex] :
-                            new AttackStep(AttackKind.MonsterStrike, 1, actor.Windup, 0.01f, Math.Max(0, actor.Recovery - 0.01f), 180, 1, 1, 0);
+                            new AttackStep(AttackKind.MonsterStrike, 1, actor.Windup * (actor == ChargeBoss && BossEnraged ? 0.85f : 1),
+                                0.01f, Math.Max(0, actor.Recovery * (actor == ChargeBoss && BossEnraged ? 0.85f : 1) - 0.01f), 180, 1, actor == ChargeBoss ? 1.5f : 1, 0);
                     }
                     else
                     {
@@ -372,7 +521,7 @@ namespace EnhancementTower.Combat
                     {
                         actor.Attacks++; actor.SlashTime = step.Active;
                         if (actor != Hero && target.Alive && InArc(actor.Position, actor.AttackAim, target.Position, actor.Range, 180))
-                            DealHit(actor, target, 1);
+                            DealHit(actor, target, step.DamageScale);
                     }
                     if (actor == Hero && actor.PhaseTime >= step.Windup && previous < step.Windup + step.Active)
                         ResolveSwing(step);
@@ -670,7 +819,7 @@ namespace EnhancementTower.Combat
             target.HitFlash = target.LastHitKind == AttackKind.Thrust ? 0.2f : 0.14f;
             attacker.LastHitCount++;
             bool breakthrough = attacker == Hero && attacker.CurrentAttack.Kind == AttackKind.Breakthrough;
-            if (attacker == Hero && target.Alive && (breakthrough || KnockbackDistance > 0) && target.KnockbackCooldown <= 0)
+            if (attacker == Hero && target != ChargeBoss && target.Alive && (breakthrough || KnockbackDistance > 0) && target.KnockbackCooldown <= 0)
             {
                 target.KnockbackDirection = (target.Position - attacker.Position).Normalized;
                 target.KnockbackRemaining = Math.Min(0.6f, (breakthrough ? Tactics.PushDistance : KnockbackDistance) * attacker.CurrentAttack.KnockbackScale);

@@ -160,6 +160,7 @@ namespace EnhancementTower.Presentation
             GUI.Label(rect, state.Number, numberStyle);
         }
         public static Color AttackColor(AttackKind kind) => kind == AttackKind.Thrust ? new Color(0.55f, 1, 1) :
+            kind == AttackKind.BossSweep || kind == AttackKind.BossCharge ? new Color(1, 0.35f, 0.15f) :
             kind == AttackKind.Breakthrough ? new Color(1, 0.4f, 0.15f) : kind == AttackKind.ReverseSlash ? new Color(1, 0.7f, 0.25f) : new Color(1, 0.95f, 0.6f);
         public void Dispose()
         {
