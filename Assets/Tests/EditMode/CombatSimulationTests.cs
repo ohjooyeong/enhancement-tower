@@ -498,4 +498,186 @@ public class CombatSimulationTests
         restarted.Advance(0.3);
         Assert.AreEqual(AttackKind.DiagonalSlash, restarted.Hero.CurrentAttack.Kind);
     }
+    private static CombatSimulation TrappedBattle(bool enabled = true, bool pinned = false)
+    {
+        var enemies = new Fighter[8];
+        for (int i = 0; i < enemies.Length; i++)
+        {
+            double angle = i * System.Math.PI / 4;
+            enemies[i] = new Fighter(new Point((float)System.Math.Cos(angle) * 0.65f,
+                (float)System.Math.Sin(angle) * 0.65f), 5000, 1, 0, 0.85f);
+        }
+        var hero = new Fighter(new Point(), 5000, 1, pinned ? 0 : 1.9f, 0.85f);
+        return new CombatSimulation(hero, enemies, null, knockbackDistance: 0,
+            tactics: new TacticalSettings(enabled));
+    }
+    [Test]
+    public void TrappedHeroPushesThenAdvancesWithoutPhasingOrSpendingComboStep()
+    {
+        var battle = TrappedBattle();
+        int previousCount = 0, lastStart = -10000, savedCombo = -1, attacksAtStart = 0;
+        bool advanced = false, completed = false;
+        for (int tick = 0; tick < 1200; tick++)
+        {
+            battle.Advance(CombatSimulation.Tick);
+            if (battle.Breakthroughs != previousCount)
+            {
+                Assert.GreaterOrEqual(tick - lastStart, 479);
+                Assert.GreaterOrEqual(tick, 72);
+                previousCount = battle.Breakthroughs; lastStart = tick;
+                savedCombo = battle.Hero.ComboIndex; attacksAtStart = battle.Hero.Attacks;
+            }
+            if (battle.Hero.State == CombatState.BreakthroughAdvance)
+            {
+                advanced = true;
+                Assert.AreEqual(savedCombo, battle.Hero.ComboIndex);
+            }
+            if (advanced && battle.Hero.Attacks > attacksAtStart + 1) completed = true;
+            Assert.GreaterOrEqual(battle.Hero.Position.Y, battle.RetreatFloor - 0.0001f);
+            foreach (var enemy in battle.Monsters)
+                Assert.GreaterOrEqual((enemy.Position - battle.Hero.Position).Length, 0.5599f);
+        }
+        Assert.Greater(battle.Breakthroughs, 0);
+        Assert.IsTrue(advanced);
+        Assert.IsTrue(completed, "Hero must return to normal attacks after advancing.");
+        Assert.Greater(battle.BreakthroughTravel, 0.05f);
+        Assert.LessOrEqual(battle.BreakthroughTravel, battle.Breakthroughs * 0.4001f);
+    }
+    [Test]
+    public void DisabledOrImmobileHeroNeverUsesBreakthrough()
+    {
+        var disabled = TrappedBattle(false); var pinned = TrappedBattle(pinned: true);
+        disabled.Advance(12); pinned.Advance(12);
+        Assert.AreEqual(0, disabled.Breakthroughs);
+        Assert.AreEqual(0, pinned.Breakthroughs);
+        Assert.Greater(disabled.Hero.Attacks, 5);
+        Assert.Greater(pinned.Hero.Attacks, 5);
+    }
+    [Test]
+    public void BreakthroughIsDeterministicAcrossFrameBatches()
+    {
+        var a = TrappedBattle(); var b = TrappedBattle();
+        for (int tick = 0; tick < 900; tick++) a.Advance(CombatSimulation.Tick);
+        for (int frame = 0; frame < 225; frame++) b.Advance(CombatSimulation.Tick * 4.0);
+        Assert.AreEqual(a.Breakthroughs, b.Breakthroughs);
+        Assert.AreEqual(a.BreakthroughTravel, b.BreakthroughTravel);
+        Assert.AreEqual(a.Hero.Health, b.Hero.Health);
+        Assert.AreEqual(a.Hero.Attacks, b.Hero.Attacks);
+        Assert.AreEqual(a.Hero.Position.X, b.Hero.Position.X);
+        Assert.AreEqual(a.Hero.Position.Y, b.Hero.Position.Y);
+    }
+    [Test]
+    public void OpenDuelKeepsAttackingWithoutBreakthroughOrRepeatedEvading()
+    {
+        var hero = new Fighter(new Point(), 5000, 1, 1.9f, 0.85f);
+        var enemy = new Fighter(new Point(0, 0.7f), 5000, 1, 0, 0.85f);
+        var battle = new CombatSimulation(hero, new[] { enemy }, null, tactics: new TacticalSettings());
+        battle.Advance(12);
+        Assert.AreEqual(0, battle.Breakthroughs);
+        Assert.AreEqual(0, battle.Repositions);
+        Assert.Greater(hero.Attacks, 8);
+    }
+    private static CombatSimulation WeightedBattle(bool leftDangerous)
+    {
+        var hero = new Fighter(new Point(), 5000, 1, 1.9f, 0.85f);
+        var enemies = new[] {
+            new Fighter(new Point(0, 0.7f), 5000, 1, 0, 0.85f),
+            new Fighter(new Point(-0.65f, 0.6f), 5000, 1, 0, 0.85f, threatWeight: leftDangerous ? 4 : 1),
+            new Fighter(new Point(0.65f, 0.6f), 5000, 1, 0, 0.85f, threatWeight: leftDangerous ? 1 : 4) };
+        return new CombatSimulation(hero, enemies, null, tactics: new TacticalSettings());
+    }
+    [Test]
+    public void MirroredEnemyThreatChangesChosenRepositionDirection()
+    {
+        var left = WeightedBattle(true); var right = WeightedBattle(false);
+        for (int tick = 0; tick < 180 && (left.Repositions == 0 || right.Repositions == 0); tick++)
+        { left.Advance(CombatSimulation.Tick); right.Advance(CombatSimulation.Tick); }
+        Assert.Greater(left.Repositions, 0); Assert.Greater(right.Repositions, 0);
+        Assert.Greater(left.LastRepositionDirection.X, 0.05f);
+        Assert.Less(right.LastRepositionDirection.X, -0.05f);
+    }
+    [TestCase(8)]
+    [TestCase(12)]
+    public void MixedThreatTacticalCrowdStaysBoundedAndTerminates(int count)
+    {
+        var original = Stress(count);
+        var enemies = new Fighter[count];
+        for (int i = 0; i < count; i++)
+        {
+            bool strong = i % 4 == 3;
+            enemies[i] = new Fighter(original.Monsters[i].Position, 60, strong ? 9 : 6,
+                strong ? 1.05f : 1.4f, 0.85f, strong ? 0.5f : 0.3f, strong ? 0.9f : 0.7f,
+                threatWeight: strong ? 1.8f : 1);
+        }
+        var battle = new CombatSimulation(original.Hero, enemies, null, knockbackDistance: 0.3f, tactics: new TacticalSettings());
+        int lastAttack = 0, silent = 0;
+        for (int tick = 0; tick < 3600; tick++)
+        {
+            battle.Advance(CombatSimulation.Tick);
+            Assert.That(battle.Hero.Position.X, Is.InRange(-2, 2));
+            Assert.GreaterOrEqual(battle.Hero.Position.Y, battle.RetreatFloor - 0.0001f);
+            if (battle.Hero.Alive && battle.LivingMonsters > 0)
+            {
+                silent = battle.Hero.Attacks == lastAttack ? silent + 1 : 0;
+                Assert.Less(silent, 300);
+            }
+            lastAttack = battle.Hero.Attacks;
+            foreach (var enemy in enemies)
+            {
+                Assert.That(enemy.Position.X, Is.InRange(-2, 2));
+                Assert.That(enemy.Position.Y, Is.InRange(-3, 4));
+                if (enemy.Alive && battle.Hero.Alive) Assert.GreaterOrEqual((enemy.Position - battle.Hero.Position).Length, 0.5599f);
+            }
+        }
+        Assert.IsTrue(!battle.Hero.Alive || battle.LivingMonsters == 0);
+    }
+    [Test]
+    public void BreakthroughAgainstMovingEnemiesAtCornerDoesNotCrossWallsOrFeet()
+    {
+        var hero = new Fighter(new Point(-2, -3), 5000, 1, 1.9f, 0.85f);
+        var enemies = new Fighter[5];
+        for (int i = 0; i < 5; i++)
+        {
+            double angle = i * System.Math.PI / 8;
+            enemies[i] = new Fighter(new Point(-2 + (float)System.Math.Cos(angle) * 0.65f,
+                -3 + (float)System.Math.Sin(angle) * 0.65f), 5000, 1, 1.4f, 0.85f);
+        }
+        var battle = new CombatSimulation(hero, enemies, null, tactics: new TacticalSettings());
+        for (int tick = 0; tick < 600; tick++)
+        {
+            battle.Advance(CombatSimulation.Tick);
+            Assert.That(hero.Position.X, Is.InRange(-2, 2));
+            Assert.GreaterOrEqual(hero.Position.Y, -3);
+            foreach (var enemy in enemies) Assert.GreaterOrEqual((hero.Position - enemy.Position).Length, 0.5599f);
+        }
+        Assert.Greater(battle.Breakthroughs, 0);
+        Assert.Greater(battle.BreakthroughTravel, 0.03f);
+        Assert.Greater(hero.Attacks, 5);
+    }
+    [Test]
+    public void RuntimeTrapPresetCreatesSpaceAgainstMovingMixedEnemies()
+    {
+        var hero = new Fighter(new Point(0, -1.5f), 500, 12, 1.9f, 0.85f);
+        var enemies = new Fighter[8];
+        for (int i = 0; i < 8; i++)
+        {
+            double angle = i * System.Math.PI / 4;
+            bool strong = i % 4 == 3;
+            enemies[i] = new Fighter(new Point((float)System.Math.Cos(angle) * 0.65f,
+                -1.5f + (float)System.Math.Sin(angle) * 0.65f), 120, strong ? 9 : 6,
+                strong ? 1.05f : 1.4f, 0.85f, strong ? 0.5f : 0.3f, strong ? 0.9f : 0.7f,
+                threatWeight: strong ? 1.8f : 1);
+        }
+        var battle = new CombatSimulation(hero, enemies, null, tactics: new TacticalSettings());
+        for (int tick = 0; tick < 600; tick++)
+        {
+            battle.Advance(CombatSimulation.Tick);
+            if (hero.Alive)
+                foreach (var enemy in enemies)
+                    if (enemy.Alive) Assert.GreaterOrEqual((hero.Position - enemy.Position).Length, 0.5599f);
+        }
+        Assert.Greater(battle.Breakthroughs, 0);
+        Assert.Greater(battle.BreakthroughTravel, 0.03f);
+        Assert.Greater(hero.Attacks, 5);
+    }
 }

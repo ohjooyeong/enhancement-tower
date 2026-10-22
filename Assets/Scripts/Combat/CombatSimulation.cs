@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace EnhancementTower.Combat
 {
-    public enum CombatState { Search, Approach, Attack, Reposition, Dead }
+    public enum CombatState { Search, Approach, Attack, Reposition, Dead, BreakthroughAdvance }
 
     // Value coordinates keep the simulation independent of Unity physics and render frames.
     public struct Point
@@ -17,7 +17,7 @@ namespace EnhancementTower.Combat
         public static Point operator *(Point a, float b) => new Point(a.X * b, a.Y * b);
     }
 
-    public enum AttackKind { DiagonalSlash, ReverseSlash, Thrust, MonsterStrike }
+    public enum AttackKind { DiagonalSlash, ReverseSlash, Thrust, MonsterStrike, Breakthrough }
 
     public readonly struct AttackStep
     {
@@ -47,6 +47,7 @@ namespace EnhancementTower.Combat
         public Point Position, Movement, Aim = new Point(0, 1), AttackAim;
         public CombatState State;
         public readonly int MaxHealth, Damage, Defense;
+        public readonly float ThreatWeight;
         public Fighter Target { get; internal set; }
         internal Fighter AttackTarget;
         public AttackStep CurrentAttack { get; internal set; }
@@ -65,12 +66,12 @@ namespace EnhancementTower.Combat
         internal float KnockbackCooldown;
         public bool Alive => Health > 0;
         public Fighter(Point position, int health, int damage, float speed, float range,
-            float windup = 0.22f, float recovery = 0.68f, int defense = 0)
+            float windup = 0.22f, float recovery = 0.68f, int defense = 0, float threatWeight = 1)
         {
-            if (health <= 0 || damage <= 0 || speed < 0 || range < 0.6f || windup <= 0 || recovery <= 0 || defense < 0)
+            if (health <= 0 || damage <= 0 || speed < 0 || range < 0.6f || windup <= 0 || recovery <= 0 || defense < 0 || threatWeight <= 0 || float.IsNaN(threatWeight) || float.IsInfinity(threatWeight))
                 throw new ArgumentOutOfRangeException(nameof(health), "Invalid prototype combat settings.");
             Position = position; Health = MaxHealth = health; Damage = damage;
-            Defense = defense; Speed = speed; Range = range; Windup = windup; Recovery = recovery;
+            ThreatWeight = threatWeight; Defense = defense; Speed = speed; Range = range; Windup = windup; Recovery = recovery;
         }
     }
 
@@ -89,6 +90,29 @@ namespace EnhancementTower.Combat
             Cooldown = cooldown; RetreatDistance = retreatDistance;
         }
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
+    }
+
+    public sealed class TacticalSettings
+    {
+        public readonly bool Enabled;
+        public readonly float BlockSeconds, Cooldown, AdvanceDistance, PushDistance, MinimumImprovement;
+        public readonly float ThreatWeight, WallWeight, EngagementWeight;
+        public readonly AttackStep Breakthrough;
+        public TacticalSettings(bool enabled = true, float blockSeconds = 1.2f, float cooldown = 8,
+            float advanceDistance = 0.4f, float pushDistance = 0.5f, float minimumImprovement = 0.12f,
+            float threatWeight = 1, float wallWeight = 0.8f, float engagementWeight = 0.8f, AttackStep? breakthrough = null)
+        {
+            float sum = blockSeconds + cooldown + advanceDistance + pushDistance + minimumImprovement + threatWeight + wallWeight + engagementWeight;
+            if (float.IsNaN(sum) || float.IsInfinity(sum) || blockSeconds < 0.5f || cooldown < 3 ||
+                advanceDistance <= 0 || advanceDistance > 0.6f || pushDistance <= 0 || pushDistance > 0.6f ||
+                minimumImprovement < 0 || threatWeight < 0 || wallWeight < 0 || engagementWeight < 0)
+                throw new ArgumentOutOfRangeException(nameof(blockSeconds));
+            Enabled = enabled; BlockSeconds = blockSeconds; Cooldown = cooldown; AdvanceDistance = advanceDistance;
+            PushDistance = pushDistance; MinimumImprovement = minimumImprovement; ThreatWeight = threatWeight;
+            WallWeight = wallWeight; EngagementWeight = engagementWeight;
+            Breakthrough = breakthrough ?? new AttackStep(AttackKind.Breakthrough, 3, 0.32f, 0.16f, 0.45f, 100, 1.1f, 1.1f, 1);
+            if (Breakthrough.Kind != AttackKind.Breakthrough) throw new ArgumentException("Expected breakthrough action.");
+        }
     }
 
     public sealed class CombatSimulation
@@ -119,10 +143,21 @@ namespace EnhancementTower.Combat
         private bool repositioning;
         private Point repositionGoal, repositionNext;
         private bool hasRepositionNext;
+        public readonly TacticalSettings Tactics;
+        public int Breakthroughs { get; private set; }
+        public float BreakthroughCooldown { get; private set; }
+        public float BlockedSeconds { get; private set; }
+        public float BreakthroughTravel { get; private set; }
+        public Point LastRepositionDirection { get; private set; }
+        private Point breakthroughDirection;
+        private float advanceRemaining, advanceTime;
+        private bool constrained, advanceEnded;
+        private int nextConstraintCheck;
         public CombatSimulation(Fighter hero, params Fighter[] monsters) : this(hero, monsters, null) { }
-        public CombatSimulation(Fighter hero, Fighter[] monsters, AttackStep[] attacks, RepositionSettings reposition = null, float knockbackDistance = 0)
+        public CombatSimulation(Fighter hero, Fighter[] monsters, AttackStep[] attacks, RepositionSettings reposition = null, float knockbackDistance = 0, TacticalSettings tactics = null)
         {
             if (hero == null || monsters == null || monsters.Length == 0) throw new ArgumentException("A hero and enemies are required.");
+            Tactics = tactics ?? new TacticalSettings(false);
             combo = attacks == null ? AttackStep.DefaultCombo(hero.Windup, hero.Recovery) : (AttackStep[])attacks.Clone();
             if (combo.Length == 0) throw new ArgumentException("Combo cannot be empty.");
             for (int i = 0; i < combo.Length; i++)
@@ -164,6 +199,8 @@ namespace EnhancementTower.Combat
                 accumulator -= Tick;
                 RepositionCooldown = Math.Max(0, RepositionCooldown - Tick);
                 Pressure = NearbyCount(Hero.Position);
+                BreakthroughCooldown = Math.Max(0, BreakthroughCooldown - Tick);
+                UpdateConstraint();
                 Step(Hero);
                 for (int i = 0; i < enemies.Length; i++) Step(enemies[i]);
                 SeparateMonsters();
@@ -248,13 +285,33 @@ namespace EnhancementTower.Combat
                     }
                     if (actor == Hero && actor.PhaseTime >= step.Windup && previous < step.Windup + step.Active)
                         ResolveSwing(step);
-                    if (actor.PhaseTime >= step.Duration)
+                    if (actor == Hero && step.Kind == AttackKind.Breakthrough && actor.PhaseTime >= step.Windup + step.Active)
+                    {
+                        actor.State = CombatState.BreakthroughAdvance;
+                        advanceRemaining = Tactics.AdvanceDistance; advanceTime = 0; advanceEnded = false;
+                    }
+                    else if (actor.PhaseTime >= step.Duration)
                     {
                         if (actor == Hero) actor.ComboIndex = (actor.ComboIndex + 1) % combo.Length;
                         actor.State = CombatState.Reposition;
                     }
                     break;
+                case CombatState.BreakthroughAdvance:
+                    actor.PhaseTime += Tick;
+                    if (!advanceEnded)
+                    {
+                        Point beforeAdvance = actor.Position;
+                        actor.Position = MoveWithoutCrossing(actor, Clamp(beforeAdvance + breakthroughDirection * Math.Min(advanceRemaining, actor.Speed * Tick)));
+                        float advanced = (actor.Position - beforeAdvance).Length;
+                        advanceRemaining -= advanced; advanceTime += Tick; BreakthroughTravel += advanced;
+                        actor.Movement = (actor.Position - beforeAdvance) * (1f / Tick);
+                        advanceEnded = advanced < 0.0001f || advanceRemaining < 0.001f || advanceTime >= 0.6f;
+                    }
+                    if (actor.PhaseTime >= actor.CurrentAttack.Duration)
+                    { BlockedSeconds = 0; actor.State = CombatState.Search; }
+                    break;
                 case CombatState.Reposition:
+                    if (actor == Hero && !repositioning && TryStartBreakthrough()) break;
                     if (actor != Hero || (!repositioning && !TryStartReposition()))
                     { actor.State = CombatState.Search; break; }
                     Point beforeStep = actor.Position;
@@ -348,7 +405,7 @@ namespace EnhancementTower.Combat
         {
             if (!RepositionRules.Enabled || Hero.Speed <= 0 || RepositionCooldown > 0 ||
                 Pressure < RepositionRules.PressureThreshold) return false;
-            float best = EscapeScore(Hero.Position) - 0.05f;
+            float best = EscapeScore(Hero.Position) - (Tactics.Enabled ? Tactics.MinimumImprovement : 0.05f);
             bool found = false;
             hasRepositionNext = false;
             // Sample free headings, not lanes. Try straight and bounded two-leg routes.
@@ -376,6 +433,7 @@ namespace EnhancementTower.Combat
                 }
             }
             if (!found) return false; // Hold ground and attack if no useful space exists.
+            LastRepositionDirection = (repositionGoal - Hero.Position).Normalized;
             repositioning = true; Repositions++; RepositionCooldown = RepositionRules.Cooldown;
             return true;
         }
@@ -389,7 +447,70 @@ namespace EnhancementTower.Combat
             float wall = Math.Max(0, 0.6f - (2 - Math.Abs(position.X)));
             float rear = Math.Max(0, 0.6f - (position.Y - RetreatFloor));
             float front = Math.Max(0, 0.6f - (4 - position.Y));
-            return Crowding(position) + 0.6f * (wall * wall + rear * rear + front * front);
+            float boundary = wall * wall + rear * rear + front * front;
+            if (!Tactics.Enabled) return Crowding(position) + 0.6f * boundary;
+            float risk = 0, nearest = float.MaxValue;
+            for (int i = 0; i < enemies.Length; i++)
+            {
+                Fighter enemy = enemies[i];
+                if (!enemy.Alive) continue;
+                float distance = (enemy.Position - position).Length;
+                nearest = Math.Min(nearest, distance);
+                float proximity = Math.Max(0, 1.6f - distance);
+                float readiness = enemy.State == CombatState.Attack ?
+                    (enemy.PhaseTime < enemy.CurrentAttack.Windup ? 1.5f : 0.7f) : 1;
+                risk += proximity * proximity * enemy.ThreatWeight * readiness;
+                if (enemy.State == CombatState.Attack && enemy.PhaseTime < enemy.CurrentAttack.Windup &&
+                    InArc(enemy.Position, enemy.AttackAim, position, enemy.Range, 180)) risk += enemy.ThreatWeight * 0.4f;
+            }
+            float lostContact = nearest == float.MaxValue ? 0 : Math.Max(0, nearest - Hero.Range);
+            Point displacement = position - Hero.Position;
+            float reverse = displacement.Length < 0.001f || LastRepositionDirection.Length < 0.001f ? 0 :
+                Math.Max(0, -(displacement.Normalized.X * LastRepositionDirection.X + displacement.Normalized.Y * LastRepositionDirection.Y)) * 0.04f;
+            return risk * Tactics.ThreatWeight + boundary * Tactics.WallWeight +
+                lostContact * lostContact * Tactics.EngagementWeight + reverse;
+        }
+        private void UpdateConstraint()
+        {
+            if (!Tactics.Enabled || !Hero.Alive || Pressure < RepositionRules.PressureThreshold)
+            { BlockedSeconds = 0; constrained = false; return; }
+            if (Ticks >= nextConstraintCheck)
+            {
+                nextConstraintCheck = Ticks + 12;
+                int blocked = 0;
+                for (int i = 0; i < 16; i++)
+                    if ((ReachableStep(Hero.Position, Heading(i), 0.35f) - Hero.Position).Length < 0.21f) blocked++;
+                bool wall = 2 - Math.Abs(Hero.Position.X) < 0.3f || Hero.Position.Y - RetreatFloor < 0.3f || 4 - Hero.Position.Y < 0.3f;
+                constrained = blocked >= 12 || (wall && blocked >= 8);
+            }
+            BlockedSeconds = constrained ? BlockedSeconds + Tick : 0;
+        }
+        private bool TryStartBreakthrough()
+        {
+            if (!Tactics.Enabled || !RepositionRules.Enabled || Hero.Speed <= 0 || BreakthroughCooldown > 0 ||
+                BlockedSeconds < Tactics.BlockSeconds || Pressure < RepositionRules.PressureThreshold) return false;
+            float best = float.MaxValue; bool found = false;
+            for (int i = 0; i < 16; i++)
+            {
+                Point direction = Heading(i);
+                Point destination = Clamp(Hero.Position + direction * Tactics.AdvanceDistance);
+                destination.Y = Math.Max(RetreatFloor, destination.Y);
+                if ((destination - Hero.Position).Length < Tactics.AdvanceDistance * 0.85f) continue;
+                int targets = 0;
+                for (int j = 0; j < enemies.Length; j++)
+                    if (enemies[j].Alive && InArc(Hero.Position, direction, enemies[j].Position,
+                        Hero.Range * Tactics.Breakthrough.RangeScale, Tactics.Breakthrough.Arc)) targets++;
+                if (targets == 0) continue;
+                float score = EscapeScore(destination);
+                if (score >= best) continue;
+                best = score; breakthroughDirection = direction; found = true;
+            }
+            if (!found) return false;
+            Hero.CurrentAttack = Tactics.Breakthrough;
+            Hero.Aim = Hero.AttackAim = breakthroughDirection;
+            Hero.PhaseTime = 0; Hero.LastHitCount = 0; Hero.State = CombatState.Attack;
+            Breakthroughs++; BreakthroughCooldown = Tactics.Cooldown;
+            return true;
         }
         private Point ReachableStep(Point start, Point direction, float distance)
         {
@@ -408,10 +529,11 @@ namespace EnhancementTower.Combat
             target.HitDirection = (target.Position - attacker.Position).Normalized;
             target.HitFlash = target.LastHitKind == AttackKind.Thrust ? 0.2f : 0.14f;
             attacker.LastHitCount++;
-            if (attacker == Hero && target.Alive && KnockbackDistance > 0 && target.KnockbackCooldown <= 0)
+            bool breakthrough = attacker == Hero && attacker.CurrentAttack.Kind == AttackKind.Breakthrough;
+            if (attacker == Hero && target.Alive && (breakthrough || KnockbackDistance > 0) && target.KnockbackCooldown <= 0)
             {
                 target.KnockbackDirection = (target.Position - attacker.Position).Normalized;
-                target.KnockbackRemaining = Math.Min(0.6f, KnockbackDistance * attacker.CurrentAttack.KnockbackScale);
+                target.KnockbackRemaining = Math.Min(0.6f, (breakthrough ? Tactics.PushDistance : KnockbackDistance) * attacker.CurrentAttack.KnockbackScale);
                 target.KnockbackCooldown = 0.75f;
             }
             if (!target.Alive) { target.KnockbackRemaining = 0; target.State = CombatState.Dead; target.Movement = new Point(); target.Target = null; }

@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2592894b9f5a44d19b38c1581352f9ec, type: 3}
+  m_Name: CombatTactics
+  m_EditorClassIdentifier: Assembly-CSharp::EnhancementTower.Data.CombatTacticsDefinition
+  enabledTactics: 1
+  mixedThreats: 1
+  strongEnemyThreat: 1.8
+  blockedSeconds: 1.2
+  breakthroughCooldown: 8
+  advanceDistance: 0.4
+  pushDistance: 0.5
+  minimumImprovement: 0.12
+  threatWeight: 1
+  wallWeight: 0.8
+  engagementWeight: 0.8
+  breakthrough:
+    kind: 4
+    maxTargets: 3
+    windup: 0.32
+    active: 0.16
+    recovery: 0.45
+    arc: 100
+    rangeScale: 1.1
+    damageScale: 1.1
+    knockbackScale: 1

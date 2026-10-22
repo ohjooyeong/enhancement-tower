@@ -154,6 +154,7 @@ MonoBehaviour:
   monsterDamage: 6
   heroStart: {x: -0.7, y: -1.8}
   monsterStart: {x: 0.8, y: 1.8}
+  tacticsDefinition: {fileID: 11400000, guid: 47d174713867d479f89395583ddf7474, type: 2}
   comboDefinition: {fileID: 11400000, guid: c04377f66e74442f99eabca8c8ca7242, type: 2}
 --- !u!4 &505755048
 Transform:

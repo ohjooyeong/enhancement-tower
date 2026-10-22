@@ -32,7 +32,8 @@
 
 - 설계 규칙: `04_COMBAT.md` / `25_DECISION_REGISTER.md`. 베기는 전방 가까운 적 **총 최대 3명**, 찌르기는 좁은 전방 **1명에게 강한 피해**. 주 대상+약한 주변 피해/랜덤 선택 방식은 폐기.
 - 콤보별 범위·대상 수·타격 시간·넉백·표현을 구분한다. 현재 사선 → 역베기 → 찌르기와 수치는 실험값.
-- 정적 수치: `Assets/Data/LongswordCombo.asset`. 조절/검증 방법: `26_COMBAT_PROTOTYPE.md`.
+- 기본 콤보는 고정하고 지속 막힘에서만 조건부 돌파. 재배치는 적별 위협/준비 상태·벽·재교전 거리를 평가한다.
+- 정적 수치: `Assets/Data/LongswordCombo.asset` / `Assets/Data/CombatTactics.asset`. 조절/검증 방법: `26_COMBAT_PROTOTYPE.md`.
 
 ## Prototype implementation
 - `26_COMBAT_PROTOTYPE.md`: 1~12마리 자동전투·동작별 전방 다중 베기/단일 찌르기 콤보·공격 넉백·압박 재배치·5/8/12 밀집 비교와 Unity 수동 테스트 절차.
