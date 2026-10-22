@@ -14,7 +14,7 @@
 
 ## PROTOTYPE ASSUMPTIONS, NOT LOCKED NUMBERS
 - 60-sec challenge / 50 kills / concurrent ~5 (stress-test 8 and 12), 1-second contact interval per monster, starting ASPD 1.0–1.1/s, S1 cap ~1.5/s.
-- Diagonal slash arc and forward 180° cleave exact angle/range, hit-stop frames, knockback meters, boss charge speed, AI search/reposition cooldown, boundary shape and camera follow threshold.
+- Per-action slash/thrust angles, reach, active windows, combo ordering and damage/knockback multipliers, hit-stop frames, knockback meters, boss charge speed, AI search/reposition cooldown, boundary shape and camera follow threshold.
 - Boss collision/path/telegraph geometry and four-vs-eight-direction animation output.
 - Intro time/skip details and Farming scrolling illusion vs walking to next segment.
 - Economy rates, rebirth point curve, equipment upgrade and item counts, Day30 top 200 floors targets are balancing hypotheses.
@@ -24,6 +24,11 @@
 ## DEFERRED
 - Ranged regular enemies and ranged weapons, complex boss types, future towers/theme sectors, multiplayer shared hub, server economy, live ops, guilds, PvP, cosmetic titles, full collection, additional rarities.
 - Whether telegraph avoidance uses explicit reaction probability; favor physics/geometric safe spot plus movement constraints, not arbitrary perfect dodge.
+
+## TERMINOLOGY (2026-10-22)
+- Current basic attacks: **forward multi-target slash** / **single-target thrust**, using the hero as the geometry origin. A slash's cap is 3 total, not primary + 3 extras. Check nearest eligible unhit enemies at each active tick; already hit targets are never replaced or hit again by that action.
+- “Cleave expansion” / “explosion + cleave” remaining in historical orb or supplement examples describes possible future modifiers only. It does not restore reduced secondary damage or approve a specific splash formula; those systems require their own later design pass.
+- Canonical attack rules: `04_COMBAT.md`; presentation: `23_COMBAT_PRESENTATION_2026_10.md`; implementation and current authored values: `26_COMBAT_PROTOTYPE.md` / `Assets/Data/LongswordCombo.asset`.
 
 ## LEGACY CONFLICT RESOLUTION
 - The old 100% primary / 35% nearby cleave examples are superseded by the user-approved per-swing direct multi-target design above. Historical progress notes are not current attack rules.

@@ -150,13 +150,15 @@ preferredRange까지 자동 접근하는 것까지만 구현한다.
 ```
 
 ## 9. 첫 프로토타입 순서
+
+2026-10-22 기준 기존 클리브 단계는 아래 직접 타격 콤보로 갱신했다. 현재 구현 범위와 Unity 확인 절차는 `26_COMBAT_PROTOTYPE.md`, 정확한 에디터 버전은 `ProjectSettings/ProjectVersion.txt`를 따른다.
 P0. Project boots
 P1. Player + Monster 표시
 P2. Target Selection
 P3. Auto Positioning
 P4. Auto Attack
 P5. Damage / HP / Death
-P6. Cleave
+P6. 전방 최대 3명 직접 베기 / 강한 단일 찌르기와 동작별 콤보 (`04_COMBAT.md`)
 P7. 5마리 Spawn
 P8. Pressure / Reposition
 P9. 장검 vs 대검 Positioning 비교

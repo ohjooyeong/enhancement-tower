@@ -14,7 +14,7 @@ Build a playable, mobile-first Unity 6 / C# idle action RPG **강화의 탑**. W
 - **No fixed lanes.** In tower combat player movement is autonomous in a bounded 2D field; enemies mostly emerge from the visual forward/top. No manual joystick in the tower.
 - **Same movement and camera architecture in standard fights and bosses**. Bosses only add telegraphed attacks, charge, sidesteps, turn/reacquire, and recovery. They may end up behind the hero; no forced position swap or teleport.
 - Camera is fixed **orientation**, angled-looking 2D pixel-art (quarter-view), no camera rotation; position may follow gently/scroll by segments. The player can show front/back/side sprites according to facing; not back-view-only.
-- Regular attack: front diagonal slash; wide ~180-degree cleave; short forward lunge is a candidate conditional skill, **not** mandatory combo hit.
+- Regular attacks use per-action geometry: forward slashes directly hit up to 3 nearest eligible enemies with equal base damage; narrow forward thrust hits 1 harder. No primary-target + reduced splash or random victim selection. Each enemy is hit once per action, with a total target budget across the active window. The prototype slash → reverse slash → thrust order and numerical values remain tunable; short forward lunge is a separate candidate, **not** mandatory combo movement.
 - Aim and movement vectors are distinct. Hit detection is derived from logic and attack arcs, not VFX appearance or animation frames. Combat simulation is framerate independent.
 - Monsters accumulate if kill rate < spawn pressure; limited lateral reposition and hard retreat limit; no infinite kiting. Player and monsters must not overlap at foot-center; limited monster-monster overlap allowed. No guaranteed perfect auto-dodge.
 - Normal ranged projectiles generally handled by build/defense; clearly telegraphed boss or elite AoE permits limited geometry-based sidestep. Avoid impossible/unreadable patterns.
@@ -53,7 +53,7 @@ Build a playable, mobile-first Unity 6 / C# idle action RPG **강화의 탑**. W
 ## 6. First milestone (no server, store, final graphics)
 - `CombatPrototype` scene with placeholder sprites, fixed-angle camera, one hero, one melee monster.
 - Target/approach, facing 4 dirs, attack timing, front diagonal slash and damage, hit reactions, death.
-- Add front ~180° cleave, 5→8→12 enemies stress test, overlap/retreat-limit behavior.
+- Validate forward multi-target slash / reverse slash / single-target thrust, then 5→8→12 enemies stress test and overlap/retreat-limit behavior.
 - Add one boss: telegraphed linear charge, lateral dodge, boss passes hero, hero rotates and re-engages.
 - Add basic stage spawn/clear, minimal HUD, encounter intro skip toggle.
 - Validate at portrait phone aspect ratios and performance before adding permanent progression.
