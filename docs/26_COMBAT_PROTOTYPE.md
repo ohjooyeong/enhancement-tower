@@ -97,7 +97,7 @@
 1. 타격감/판정 가독성 — 이번 구현. 실제 화면/소리 체감 확인과 수치 조절이 남는다.
 2. 최소 피해 범위/크리티컬/방어력 — 구현 완료, 수치/화면 체감 확인.
 3. 몬스터 성격 — 빠르고 약한 접근형 추가 완료. 일반/빠름/강함 조합의 실제 화면 자연스러움 확인이 남는다.
-4. 순차 소환/한 판 흐름 — 전방 합류, 적 누적 압박, 종료 조건과 최소 HUD.
+4. 순차 소환/한 판 흐름 — 구현 완료. Stage run으로 전방 합류·처치·사망·시간 초과 비교.
 5. 첫 보스 — 공통 카메라/이동 체계에서 직선 돌진 예고·조건부 회피·재교전.
 병행 도구는 화면 없는 다중 시드 승률/시간/계산 속도 검증이며, 이번 단계에서 새 보스/파밍/서버를 추가하지 않았다.
 
@@ -121,9 +121,24 @@
 - 빠른 적은 노란 작은 마름모, 강한 적은 보라 큰 직사각형, 일반 적은 빨간 직사각형이다. 크기 차이는 몸체 표현이며 모두 같은 발 충돌 반경이다. 빠른 적은 방어/치명타까지 포함한 기존 피격·넉백·사망을 공유한다. 최종 아트/비행/스킬은 추가하지 않는다.
 - Unity: Play 종료 → `Assets/Scenes/CombatPrototype` 열기 → Hierarchy의 Combat Prototype에서 **Fast Monster Definition** 참조 확인 → Play → **5 foes**. HUD `Roster: Normal 3 | Fast 1 | Heavy 1`과 노란 적을 확인한다. 8 foes는 4/2/2, 12 foes는 6/3/3이다. Roster는 시작 시 편성이며 생존 수는 기존 Enemies를 본다.
 - 화면 **Include fast foes**를 끄면 즉시 새 전투를 시작하며 빠른 적 슬롯이 일반으로 바뀐다. 켜면 다시 섞인다. 같은 시드로 비교하려면 **New seed each restart**를 끄고 버튼/토글로 재시작한다. Mixed Threats가 꺼져 있으면 Include fast foes가 켜져 있어도 전부 일반형이므로 필요하면 `CombatTactics.asset → Mixed Threats`를 확인한다.
-- `Assets/Data/FastMonster`에서 Health Scale=.6 / Damage Scale=.65 / Speed=2.1 / Windup=.24 / Recovery=.65 / Threat Weight=1.15를 조절한다. 시작/Restart 때 스냅샷을 읽는다. 기본 HP60/공격6에서는 빠른 적 HP36/공격4다. DEF는 CombatDamage의 Monster Defense를 따른다. 수치는 최종 스탯이 아닌 비교 가정이다.
+- `Assets/Data/FastMonster`에서 Health Scale=.6 / Damage Scale=.65 / Speed=2.1 / Windup=.16 / Recovery=.32 / Threat Weight=1.35를 조절한다. 시작/Restart 때 스냅샷을 읽는다. 기본 HP60/공격6에서는 빠른 적 HP36/공격4다. DEF는 CombatDamage의 Monster Defense를 따른다. 수치는 최종 스탯이 아닌 비교 가정이다.
 - 수동 검증: 고정 시드로 빠른 적 ON/OFF → 빠른 적이 더 일찍 접근하고 짧게 준비 후 공격하는지, 체력바가 더 빨리 줄어드는지 확인한다. 동일 시작 거리일 때 접근 속도를 비교한다(기본 배치의 거리가 달라 반드시 먼저 도착하는 것은 아니다). 5/8/12 및 Wall/Trap test에서 색·크기·숫자·사망 표시가 구분되고 영웅이 재교전하는지, Restart 후 예전 도형/숫자가 남지 않는지 확인한다. 9:16 화면에서는 아래쪽 Include fast foes와 Roster 줄도 확인한다.
 - 사용자가 저장한 씬 Hero Health=500과 기존 Inspector 값은 보존했다. 이번 커밋의 씬 변경은 새 정의 참조만 포함한다.
-- 다음 최소 단계는 **전방 순차 소환과 한 판의 처치/종료 흐름**이다. 이번에 스폰/보스/장비/강화/서버는 추가하지 않았다.
+- 다음 최소 단계였던 전방 순차 소환은 아래 후속 구현을 참고한다. 보스/장비/강화/서버는 아직 없다.
 
 - 검증: 임시 Unity 6000.6.4f1에서 컴파일 및 EditMode **64/64 통과**. 빠른 접근/낮은 체력·공격력/같은 사거리, 작은 기본 스탯·Trap HP 하한, 설정 유효성, 타입 토글/강한 적 슬롯 유지, 5/8/12 혼합 전투의 경계·발 충돌·종료·프레임 간격 재현성을 확인했다. 헤드리스 Play Mode 480틱 이상에서 에셋 수치 적용/마름모 회전/빠른 적 OFF 후 일반 복원/강한 적 유지/표현 토글과 순수 전투 일치를 확인했다. 실제 화면 자연스러움/청음·모바일 성능·Windows는 미검증이다. 임시 Editor 검색 인덱서 내부 예외는 게임 코드와 분리했다.
+
+## 전방 순차 소환·한 판 종료
+
+- 추가/변경: `StageEncounter.cs`(순수 고정 틱 예약/소환/종료), `StageDefinition.cs` + `Assets/Data/PrototypeStage.asset`(정적 설정), `StageEncounterTests.cs`, 전투 모델의 예약 용량/실제 적 추가 API, 씬/생성기/화면 조합/HUD와 관련 문서. 빠른 적은 준비 .16/회복 .32초·위협 1.35로 조정했다. 영웅 공속과 기존 베기/찌르기 순서는 그대로다.
+- Unity 화면: Play 종료 → CombatPrototype 씬 다시 열기 → Play → 아래 **Stage run** 클릭. 시작 5마리 뒤 화면 상단에서 적이 하나씩 합류한다. HUD **Kills / Pending / Time / Stage / Alive**를 본다. 기본은 총50·처음5·살아 있는 상한8·합류1.2초·시간60초다. 50명을 먼저 생성하지 않는다.
+- `Assets → Data → PrototypeStage`에서 Total Enemies / Initial Enemies / Max Alive / Spawn Interval / Time Limit을 조절한다. Initial ≤ Total, Initial ≤ Max Alive ≤ 12를 지킨다. 런 시작에 모든 설정/타입/피해 정의를 스냅샷으로 읽는다. Inspector Stage Definition 참조는 연결되어 있다. 에셋이 없으면 Create Default Combo Asset 메뉴로 생성 후 참조를 할당한다.
+- 생존 적이 있어도 주기적으로 새 적이 합류하므로 처치가 느리면 상한까지 쌓인다. 상단의 후보14곳 중 영웅과 최소1.1, 다른 생존 적과 .52 이상 떨어진 점을 고른다. 모두 막혔거나 생존 상한이면 .2초 후 재검사하며 밀린 적을 몰아서 생성하지 않는다. 후보점은 이동 레인이 아니다.
+- 처음부터 모든 적을 활성화하지 않는다. Fighter/몸체는 실제 소환 때 생성하며 버퍼는 시작에 총량만큼 확보한다. 사망 모델은 적중 인덱스/전투 기록을 위해 해당 한 판 안에서 유지하되 AI/충돌에서 즉시 제외한다. 사망 도형은 표시 1초 후 비활성화하고 Restart 때 정리한다. 풀링/성능 최적화는 실제 프로파일링 후 판단한다.
+- CLEAR는 Pending=0이며 생존 적0일 때다. Pending이 남으면 잠깐 적이 없어도 계속 기다린다. DEFEAT는 영웅 사망, TIME UP은 제한 시간 종료다. 종료 후 시뮬레이션·소환·남은 시간은 동결한다. 영웅 체력을 합류마다 회복시키지 않는다. Restart는 같은 Stage 모드로 전체 예약/타이머/피해 표시를 초기화한다.
+- 기존 **5/8/12 foes**, Wall test, Trap test는 한 번에 배치하는 비교 모드로 돌아간다. Include fast foes / Pressure reposition / New seed 설정을 바꾸면 현재 모드를 재시작한다. Roster는 지금까지 실제 소환한 타입별 누적 수이며 Enemies/Alive는 생존 수다. Stage 모드의 Enemies 분모는 지금까지 소환한 수다.
+- 수동 체크: Stage run → Alive가 늘어도8을 넘지 않는지 / Pending이 줄고 Kills가 누적되는지 확인 → Restart로 Kills0/처음5/Pending45/시간60 복원 확인 → 5 foes로 기존 비교 복귀. 고정 시드로 반복하면 같은 결과가 나와야 한다.
+- 종료 확인용 임시 설정: Total=Initial=1, Hero Damage=1000으로 CLEAR 확인; Hero Health=1로 DEFEAT 확인; Time Limit=1로 TIME UP 확인. 종료 뒤 숫자와 적 위치/타이머가 진행하지 않아야 한다(남은 피드백 연출은 자연스럽게 사라진다). 확인 후 변경한 값을 원래대로 복원한다. 실제 화면의 혼잡도/종료 메시지와 9:16 세로 화면에서 아래 버튼 접근성을 확인한다.
+- 이 단계는 한 판만 다룬다. 자동 다음 층·2회 실패 후 Farming·보상·인트로/스킵은 후속이며, 다음 전투 검증은 같은 체계의 직선 돌진 보스다. 총50/60초는 반드시 클리어하도록 조정한 최종 난이도가 아니다.
+
+- 검증: 임시 Unity 6000.6.4f1에서 컴파일 및 EditMode **74/74 통과**. 실제 순차 생성/생존 상한/예약 대기/전체 처치/치사·시간 초과 동결/안전한 상단 합류/빠른 적의 짧은 공격 간격과 3시드의 50마리 예약 전투 종료·프레임 재현을 포함한다. 헤드리스 Play Mode에서 처음 실제 적/도형5개만 생성, 480틱 이상 점진 합류, 동일 설정의 순수 전투 일치, 종료/재시작/기존 군집 복귀를 확인했다. 비교 모델은 씬의 현재 재배치 설정을 반영한다. 임시 Editor 검색 인덱서 내부 예외는 게임 코드와 분리했다. 실제 화면의 난이도/자연스러움·소리·모바일 성능·Windows는 미검증이다.

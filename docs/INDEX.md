@@ -36,4 +36,4 @@
 - 정적 수치: `Assets/Data/LongswordCombo.asset` / `Assets/Data/CombatTactics.asset` / `Assets/Data/CombatDamage.asset`. 피해 범위·개별 치명타·방어 차감은 조절 가능한 프로토타입 수치다. 조절/검증 방법: `26_COMBAT_PROTOTYPE.md`.
 
 ## Prototype implementation
-- `26_COMBAT_PROTOTYPE.md`: 1~12마리 자동전투·동작별 전방 다중 베기/단일 찌르기 콤보·공격 넉백·압박 재배치·5/8/12 밀집 비교와 타격 피드백/선택형 판정 범위 표시와 Unity 수동 테스트 절차. 일반/빠른 약체/강한 근접 혼합 및 `FastMonster.asset` 조절 포함.
+- `26_COMBAT_PROTOTYPE.md`: 1~12마리 자동전투·동작별 전방 다중 베기/단일 찌르기 콤보·공격 넉백·압박 재배치·5/8/12 밀집 비교와 타격 피드백/선택형 판정 범위 표시와 Unity 수동 테스트 절차. 일반/빠른 약체/강한 근접 혼합 및 `FastMonster.asset` 조절, `PrototypeStage.asset` 기반 전방 순차 소환/처치/시간 제한 포함.

@@ -8,7 +8,7 @@ namespace EnhancementTower.Combat
     {
         public readonly float HealthScale, DamageScale, Speed, Windup, Recovery, ThreatWeight;
         public FastMonsterSettings(float healthScale = 0.6f, float damageScale = 0.65f,
-            float speed = 2.1f, float windup = 0.24f, float recovery = 0.65f, float threatWeight = 1.15f)
+            float speed = 2.1f, float windup = 0.16f, float recovery = 0.32f, float threatWeight = 1.35f)
         {
             double sum = (double)healthScale + damageScale + speed + windup + recovery + threatWeight;
             if (double.IsNaN(sum) || double.IsInfinity(sum) || healthScale <= 0 || healthScale > 1 ||

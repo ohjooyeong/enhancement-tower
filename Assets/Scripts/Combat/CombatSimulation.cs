@@ -132,14 +132,15 @@ namespace EnhancementTower.Combat
         public readonly Fighter Hero;
         // Compatibility with the original duel tests and callers.
         public Fighter Monster => enemies[0];
-        private readonly Fighter[] enemies;
+        private readonly List<Fighter> enemies;
         public IReadOnlyList<Fighter> Monsters { get; }
         private readonly AttackStep[] combo;
         private readonly int[] hitOnSwing;
+        public int MonsterCapacity => hitOnSwing.Length;
         public readonly float KnockbackDistance;
         public int LivingMonsters
         {
-            get { int count = 0; for (int i = 0; i < enemies.Length; i++) if (enemies[i].Alive) count++; return count; }
+            get { int count = 0; for (int i = 0; i < enemies.Count; i++) if (enemies[i].Alive) count++; return count; }
         }
         private double accumulator;
         public int Ticks { get; private set; }
@@ -170,9 +171,9 @@ namespace EnhancementTower.Combat
         public int MovementChoices { get; private set; }
         public int TargetChoices { get; private set; }
         public CombatSimulation(Fighter hero, params Fighter[] monsters) : this(hero, monsters, null) { }
-        public CombatSimulation(Fighter hero, Fighter[] monsters, AttackStep[] attacks, RepositionSettings reposition = null, float knockbackDistance = 0, TacticalSettings tactics = null, int seed = 1)
+        public CombatSimulation(Fighter hero, Fighter[] monsters, AttackStep[] attacks, RepositionSettings reposition = null, float knockbackDistance = 0, TacticalSettings tactics = null, int seed = 1, int monsterCapacity = 0)
         {
-            if (hero == null || monsters == null || monsters.Length == 0) throw new ArgumentException("A hero and enemies are required.");
+            if (hero == null || monsters == null || (monsters.Length == 0 && monsterCapacity < 1)) throw new ArgumentException("A hero and enemies are required.");
             Seed = seed;
             unchecked
             {
@@ -184,32 +185,45 @@ namespace EnhancementTower.Combat
             if (randomState == 0) randomState = 0x6d2b79f5u;
             damageRandomState = randomState ^ 0xa511e9b3u;
             if (damageRandomState == 0) damageRandomState = 1;
-            choiceScores = new double[Math.Max(48, monsters.Length)];
+            int capacity = Math.Max(monsters.Length, monsterCapacity);
+            choiceScores = new double[Math.Max(48, capacity)];
             Tactics = tactics ?? new TacticalSettings(false);
             combo = attacks == null ? AttackStep.DefaultCombo(hero.Windup, hero.Recovery) : (AttackStep[])attacks.Clone();
             if (combo.Length == 0) throw new ArgumentException("Combo cannot be empty.");
             for (int i = 0; i < combo.Length; i++)
                 if (combo[i].MaxTargets < 1 || combo[i].Active <= 0) throw new ArgumentException("Invalid combo step.");
-            hitOnSwing = new int[monsters.Length];
+            hitOnSwing = new int[capacity];
             if (float.IsNaN(knockbackDistance) || float.IsInfinity(knockbackDistance) || knockbackDistance < 0 || knockbackDistance > 0.6f)
                 throw new ArgumentOutOfRangeException(nameof(knockbackDistance));
             KnockbackDistance = knockbackDistance;
             RepositionRules = reposition ?? new RepositionSettings();
             RetreatFloor = Math.Max(-3, hero.Position.Y - RepositionRules.RetreatDistance);
-            Hero = hero; enemies = (Fighter[])monsters.Clone();
-            for (int i = 0; i < enemies.Length; i++)
+            Hero = hero; enemies = new List<Fighter>(capacity);
+            enemies.AddRange(monsters);
+            for (int i = 0; i < enemies.Count; i++)
             {
                 if (enemies[i] == null || enemies[i] == hero) throw new ArgumentException("Invalid enemy.");
                 for (int j = 0; j < i; j++) if (enemies[j] == enemies[i]) throw new ArgumentException("Duplicate enemy.");
             }
-            Monsters = Array.AsReadOnly(enemies);
+            Monsters = enemies.AsReadOnly();
 
+        }
+        // Stage reservations allocate buffers once; actual fighters are added only on arrival.
+        public bool TryAddMonster(Fighter monster)
+        {
+            if (monster == null || !monster.Alive || !Hero.Alive || monster == Hero ||
+                enemies.Count >= hitOnSwing.Length || enemies.Contains(monster)) return false;
+            Point p = monster.Position;
+            if (float.IsNaN(p.X) || float.IsNaN(p.Y) || p.X < -2 || p.X > 2 || p.Y < -3 || p.Y > 4 ||
+                (p - Hero.Position).Length < FootRadius * 2) return false;
+            enemies.Add(monster);
+            return true;
         }
         private Fighter NearestTarget(Fighter actor)
         {
             if (actor != Hero) return Hero.Alive ? Hero : null;
             Fighter best = null; float distance = float.MaxValue;
-            for (int i = 0; i < enemies.Length; i++)
+            for (int i = 0; i < enemies.Count; i++)
             {
                 if (!enemies[i].Alive) continue;
                 float candidate = (enemies[i].Position - actor.Position).Length;
@@ -224,7 +238,7 @@ namespace EnhancementTower.Combat
             if (actor != Hero || nearest == null || !Tactics.Enabled || Tactics.TargetTemperature <= 0) return nearest;
             float nearestDistance = (nearest.Position - actor.Position).Length;
             float range = actor.Range * combo[actor.ComboIndex].RangeScale;
-            for (int i = 0; i < enemies.Length; i++)
+            for (int i = 0; i < enemies.Count; i++)
             {
                 Fighter enemy = enemies[i];
                 float distance = (enemy.Position - actor.Position).Length;
@@ -235,7 +249,7 @@ namespace EnhancementTower.Combat
                 float health = (float)enemy.Health / enemy.MaxHealth;
                 choiceScores[i] = distance / range + health * 0.25f - Math.Min(3, enemy.ThreatWeight) * 0.15f;
             }
-            int selected = WeightedIndex(enemies.Length, Tactics.TargetTemperature);
+            int selected = WeightedIndex(enemies.Count, Tactics.TargetTemperature);
             TargetChoices++;
             return selected < 0 ? nearest : enemies[selected];
         }
@@ -274,7 +288,7 @@ namespace EnhancementTower.Combat
                 BreakthroughCooldown = Math.Max(0, BreakthroughCooldown - Tick);
                 UpdateConstraint();
                 Step(Hero);
-                for (int i = 0; i < enemies.Length; i++) Step(enemies[i]);
+                for (int i = 0; i < enemies.Count; i++) Step(enemies[i]);
                 SeparateMonsters();
                 ApplyKnockback();
                 Ticks++;
@@ -333,7 +347,7 @@ namespace EnhancementTower.Combat
                         {
                             // Weak approach separation; some monster overlap is intentional.
                             Point separation = new Point();
-                            for (int i = 0; i < enemies.Length; i++)
+                            for (int i = 0; i < enemies.Count; i++)
                             {
                                 Fighter other = enemies[i];
                                 if (other == actor || !other.Alive) continue;
@@ -410,7 +424,7 @@ namespace EnhancementTower.Combat
             while (Hero.LastHitCount < step.MaxTargets)
             {
                 int best = -1; float distance = float.MaxValue;
-                for (int i = 0; i < enemies.Length; i++)
+                for (int i = 0; i < enemies.Count; i++)
                 {
                     Fighter candidate = enemies[i];
                     if (!candidate.Alive || hitOnSwing[i] == Hero.Attacks ||
@@ -431,12 +445,12 @@ namespace EnhancementTower.Combat
             const float spacing = 0.52f;
             for (int pass = 0; pass < 2; pass++)
             {
-                for (int i = 0; i < enemies.Length; i++)
+                for (int i = 0; i < enemies.Count; i++)
                 {
                     Fighter actor = enemies[i];
                     if (!actor.Alive || actor.Speed <= 0 || actor.KnockbackRemaining > 0) continue;
                     Point correction = new Point();
-                    for (int j = 0; j < enemies.Length; j++)
+                    for (int j = 0; j < enemies.Count; j++)
                     {
                         if (i == j || !enemies[j].Alive) continue;
                         Point away = actor.Position - enemies[j].Position;
@@ -462,14 +476,14 @@ namespace EnhancementTower.Combat
         private int NearbyCount(Point position)
         {
             int count = 0;
-            for (int i = 0; i < enemies.Length; i++)
+            for (int i = 0; i < enemies.Count; i++)
                 if (enemies[i].Alive && (enemies[i].Position - position).Length <= 1.15f) count++;
             return count;
         }
         private float Crowding(Point position)
         {
             float score = 0;
-            for (int i = 0; i < enemies.Length; i++)
+            for (int i = 0; i < enemies.Count; i++)
             {
                 if (!enemies[i].Alive) continue;
                 float distance = (enemies[i].Position - position).Length;
@@ -565,7 +579,7 @@ namespace EnhancementTower.Combat
             float boundary = wall * wall + rear * rear + front * front;
             if (!Tactics.Enabled) return Crowding(position) + 0.6f * boundary;
             float risk = 0, nearest = float.MaxValue;
-            for (int i = 0; i < enemies.Length; i++)
+            for (int i = 0; i < enemies.Count; i++)
             {
                 Fighter enemy = enemies[i];
                 if (!enemy.Alive) continue;
@@ -612,7 +626,7 @@ namespace EnhancementTower.Combat
                 destination.Y = Math.Max(RetreatFloor, destination.Y);
                 if ((destination - Hero.Position).Length < Tactics.AdvanceDistance * 0.85f) continue;
                 int targets = 0;
-                for (int j = 0; j < enemies.Length; j++)
+                for (int j = 0; j < enemies.Count; j++)
                     if (enemies[j].Alive && InArc(Hero.Position, direction, enemies[j].Position,
                         Hero.Range * Tactics.Breakthrough.RangeScale, Tactics.Breakthrough.Arc)) targets++;
                 if (targets == 0) continue;
@@ -633,7 +647,7 @@ namespace EnhancementTower.Combat
             destination.Y = Math.Max(RetreatFloor, destination.Y);
             Point motion = destination - start;
             float fraction = 1;
-            for (int i = 0; i < enemies.Length; i++)
+            for (int i = 0; i < enemies.Count; i++)
                 if (enemies[i].Alive) fraction = Math.Min(fraction, SafeFraction(start, motion, enemies[i].Position));
             return start + motion * fraction;
         }
@@ -667,7 +681,7 @@ namespace EnhancementTower.Combat
         private void ApplyKnockback()
         {
             if (!Hero.Alive) return;
-            for (int i = 0; i < enemies.Length; i++)
+            for (int i = 0; i < enemies.Count; i++)
             {
                 Fighter actor = enemies[i];
                 if (!actor.Alive || actor.KnockbackRemaining <= 0) continue;
@@ -687,7 +701,7 @@ namespace EnhancementTower.Combat
             float fraction = 1;
             if (actor == Hero)
             {
-                for (int i = 0; i < enemies.Length; i++)
+                for (int i = 0; i < enemies.Count; i++)
                     if (enemies[i].Alive) fraction = Math.Min(fraction, SafeFraction(actor.Position, motion, enemies[i].Position));
             }
             else if (Hero.Alive) fraction = SafeFraction(actor.Position, motion, Hero.Position);

@@ -21,6 +21,8 @@ public static class CombatPrototypeSceneBuilder
             AssetDatabase.LoadAssetAtPath<EnhancementTower.Data.CombatDamageDefinition>("Assets/Data/CombatDamage.asset");
         serialized.FindProperty("fastMonsterDefinition").objectReferenceValue =
             AssetDatabase.LoadAssetAtPath<EnhancementTower.Data.FastMonsterDefinition>("Assets/Data/FastMonster.asset");
+        serialized.FindProperty("stageDefinition").objectReferenceValue =
+            AssetDatabase.LoadAssetAtPath<EnhancementTower.Data.StageDefinition>("Assets/Data/PrototypeStage.asset");
         serialized.ApplyModifiedPropertiesWithoutUndo();
         EditorSceneManager.SaveScene(scene, "Assets/Scenes/CombatPrototype.unity");
     }
@@ -40,6 +42,9 @@ public static class CombatPrototypeSceneBuilder
         const string fastPath = "Assets/Data/FastMonster.asset";
         if (AssetDatabase.LoadAssetAtPath<EnhancementTower.Data.FastMonsterDefinition>(fastPath) == null)
             AssetDatabase.CreateAsset(ScriptableObject.CreateInstance<EnhancementTower.Data.FastMonsterDefinition>(), fastPath);
+        const string stagePath = "Assets/Data/PrototypeStage.asset";
+        if (AssetDatabase.LoadAssetAtPath<EnhancementTower.Data.StageDefinition>(stagePath) == null)
+            AssetDatabase.CreateAsset(ScriptableObject.CreateInstance<EnhancementTower.Data.StageDefinition>(), stagePath);
         AssetDatabase.SaveAssets();
     }
 }
