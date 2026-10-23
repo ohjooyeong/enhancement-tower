@@ -83,3 +83,7 @@ Journey 최신 흐름: 현재 층 도전→짧은 층 이동→일반층 클리�
 [27](27_FIRST_ASCENT_STORYBOOK.md) 5절의 “보스 입장/패배 귀환/강화 연결 미구현”은 그 문서 작성 당시 기록이다. 기계적인 등반·강화·보스 승패 루프는 [31](31_JOURNEY_PLAY_FLOW.md)이 이후 구현이다. 마을 NPC·대사·첫 입장 연출·보스 이후 층은 여전히 제안/미구현이다.
 
 같은 날 플레이 확인: 층 계단 연출은 프로토타입으로 유지한다. 반복 실패 후 이전/추천 층 파밍은 아직 없다. 보스가 붙어서 평타만 보이던 문제는 가까운 돌진 전에 거리를 벌리도록 [26](26_COMBAT_PROTOTYPE.md)에서 조정했다.
+
+## 2026-10-23 Unity CLI / MCP 연결
+
+[32_UNITY_CLI_MCP.md](32_UNITY_CLI_MCP.md): 공식 CLI/Pipeline 연결, Cursor/Codex 구성, 실제 EditMode104개 통과와 Console·계층·Play 시작/정지·캡처 확인 및 클라이언트 재시작 후 미검증 항목. 재검증 명령은 AGENTS.md 14절 참조. 게임 코드·씬·Renderer 변경 없음.

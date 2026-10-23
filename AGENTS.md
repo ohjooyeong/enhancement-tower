@@ -93,3 +93,14 @@ Journey now prioritizes target-floor entry, a vertical floor map and opaque entr
 The playable loop stops at floor 4. Boss clear sets `TowerCleared` and does not create floor 5. Docs list several later candidates — fail-once retry then Farming, post-boss ascent, a pure level/EXP model, local save, and storybook scenes — but none is an approved next implementation. Read the handoff table in `docs/INDEX.md` before starting new systems. Append dated notes; do not delete prior validation history or treat storybook proposals as shipped.
 
 2026-10-23 playtest kept the stair transition as a prototype and did not add farming-on-failure. A close boss now backs up before locking a charge so the fight is not only glued basic attacks. Manual Focus Guard stays manual. Details are in `docs/26_COMBAT_PROTOTYPE.md`.
+
+## 14. Unity CLI / MCP (2026-10-23)
+- 공식 `unity` CLI + `com.unity.pipeline`을 사용한다. Pipeline은 Render Pipeline과 별개다. 기존 패키지를 먼저 확인하고 MCP 전용 타사 패키지를 중복 설치하지 않는다. Unity 버전·Renderer·기존 씬은 연결 작업 때문에 변경하지 않는다.
+- 프로젝트 루트에서 `unity --version`, `unity pipeline list`, `unity command editor status --project-path . --json`으로 버전·서버 연결·대상 프로젝트를 확인한다. 여러 Editor가 열리면 항상 `--project-path`로 지정한다. 포트는 고정값을 가정하지 않는다.
+- 조회: `unity command console get --project-path . --json`, `unity command scene get_hierarchy --project-path . --json`. 지원 명령/인자는 `unity command --query <term> --json`으로 조회한다. CLI 종료 코드뿐 아니라 JSON의 `success`와 내부 결과도 확인한다.
+- 테스트: `unity command test run --mode editor --async_tests true --project-path . --json` 후 `unity command test status --project-path . --json`으로 완료·개수·실패를 확인한다. 시작 응답의 0개를 통과로 기록하지 않는다.
+- Play 검증 전 `scene list_open`으로 미저장 상태를 확인한다. `unity command editor.playmode start --project-path . --json` → `editor status`로 실제 상태 확인 → `unity command capture screenshot --view game --output Temp/pipeline-screenshots/check.png --project-path . --json` → `unity command editor.playmode stop --project-path . --json` 후 원래 상태를 확인한다. PNG를 열어 내용도 확인한다. 카메라 캡처는 모든 UI/OS 화면을 보증하지 않는다.
+- 백그라운드에서 `playing`만으로 진행을 판정하지 말고 `frameCount`/`playerLoopTicking`을 확인한다. Run In Background 변경은 필요할 때만 적용하고 원복한다. 씬 저장/재생성이나 강제 Editor 재시작으로 연결 문제를 숨기지 않는다.
+- Cursor: `.cursor/mcp.json`의 공식 `unity mcp` stdio 설정을 사용한다. `unity`가 앱 PATH에 있어야 하며 재시작 후 MCP 상태를 확인한다. 여러 프로젝트에서는 공식 `unity mcp configure cursor --local --project-path <project> --dry-run`으로 대상 설정을 먼저 확인한다. 개인 절대경로는 저장소에 커밋하지 않는다.
+- Codex: 셸에서 같은 CLI를 직접 사용 가능하다. MCP는 사용자 설정에 `codex mcp add unity -- unity mcp --project-path <project>`로 등록하고 `codex mcp get unity`로 확인한다. 앱/세션 재시작 후 도구 로드를 확인한다. 샌드박스가 프로세스 탐색/localhost를 차단하면 해당 실행 권한을 요청하며 전역 보안을 자동 완화하지 않는다.
+- 실제 검증 결과·제약·사용자 후속 절차: [docs/32_UNITY_CLI_MCP.md](docs/32_UNITY_CLI_MCP.md). 실행하지 않은 PlayMode 테스트, Windows 검증, 클라이언트 UI 연결을 완료로 표시하지 않는다.
