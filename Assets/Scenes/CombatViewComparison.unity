@@ -148,9 +148,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9f1d46eaed1254401b0e7b95a9eb0179, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnhancementTower.Presentation.CombatPrototype
-  heroHealth: 1000
+  heroHealth: 800
   monsterHealth: 60
-  heroDamage: 30
+  heroDamage: 20
   monsterDamage: 6
   heroStart: {x: -0.7, y: -1.8}
   monsterStart: {x: 0.8, y: 1.8}
