@@ -7,6 +7,7 @@ Build a playable, mobile-first Unity 6 / C# idle action RPG **강화의 탑**. W
 - Start at `docs/INDEX.md`.
 - Read `docs/23_COMBAT_PRESENTATION_2026_10.md` for current camera/movement/animation/boss/encounter rules.
 - Read `docs/25_DECISION_REGISTER.md` for decision status and conflicts.
+- Read `docs/29_LEVEL_QUEST_SKILL_SYSTEM.md` before growth/quest/skill work. The latest level/quest/two-slot approval in25 >29 > related GDD > old supplements/ADRs applies within that scope. Character level is not weapon level, skill level, floor, or RP.
 - Read related canonical docs (`04_COMBAT`, `05_AUTO_POSITIONING`, `07_TOWER_CHALLENGE`, `08_FARMING`, `11_WEAPON_SYSTEM`, `12_EQUIPMENT`, `13_ENHANCEMENT`, `15_ORBS_AND_SKILLS`, `16_REBIRTH`, `18_SERVER_ARCHITECTURE`) before touching those systems.
 - If old documents conflict, priority: `25_DECISION_REGISTER` > `23_COMBAT_PRESENTATION_2026_10` for combat presentation/positioning > current topic's GDD > `supplement_*` > historical ADR. Do not silently overwrite existing design; update the register and relevant doc when user approves a change.
 
@@ -21,12 +22,12 @@ Build a playable, mobile-first Unity 6 / C# idle action RPG **강화의 탑**. W
 - Challenge: finite stage (v0 ~50 enemy kills, ~5 concurrent baseline, ~90 sec test), no Rage. Clear→next; fail twice→appropriate Farming.
 - Farming: persistent spawns, no per-wave intro, repeatable forward illusion/segments, offline settlement, optional encounter-intro toggle; Rage is manual and **Farming-only**.
 - Hub navigation may be manual; tower combat is autonomous.
-- Visual goal (2026-10-23 user-approved): **약 4등신 캐릭터와 입체감 있는 쿼터뷰 환경으로 구성한 2.5D풍 픽셀 아트 RPG. 레인 없는 전방 중심 자유 자동전투를 사용하며 카메라 방향은 고정한다.** Modern handcrafted pixel art; rendering technology remains undecided (see `docs/28_VISUAL_DIRECTION_AND_VIEW_REVIEW.md`). No final art, full renderer migration or combat rewrite before separate approval; no shiny generic dark-fantasy UI, character EXP/level, or leveled skills in MVP.
+- Visual goal (2026-10-23 user-approved): **약 4등신 캐릭터와 입체감 있는 쿼터뷰 환경으로 구성한 2.5D풍 픽셀 아트 RPG. 레인 없는 전방 중심 자유 자동전투를 사용하며 카메라 방향은 고정한다.** Modern handcrafted pixel art; rendering technology remains undecided (see `docs/28_VISUAL_DIRECTION_AND_VIEW_REVIEW.md`). No final art, full renderer migration or combat rewrite before separate approval; no shiny generic dark-fantasy UI. Character level/EXP is now approved design; independent skill leveling is not newly approved.
 
 ## 3. Equipment & progression invariants
-- Slots: 1 weapon, 1 armor, 2 rings, 1 orb, 1 auto skill. Rage separate.
+- Slots: 1 weapon, 1 armor, 2 rings, 1 orb, **2 auto skills**. Unlock timing and execution scheduling remain undecided. Rage and manual boss Focus Guard are separate.
 - Season 1: longsword + greatsword; weapon-specific preferred range, swing timing, arc, knockback. Future weapons are not MVP.
-- No character EXP/level. Rebirth Points upgrade permanent adventurer stats.
+- Character level/kill EXP is approved (2026-10-23): capped, retained after rebirth, supports basic stats and content/skill unlocks. Lv.50 is a candidate, not a fixed cap. Combat supplies baseline EXP independently of quest completion. Enhancement remains the primary power axis; RP remains separate permanent rebirth growth. Main quests guide, growth quests add goals/rewards, achievements track long-term records. See `docs/29_LEVEL_QUEST_SKILL_SYSTEM.md` and ADR-007 (supersedes ADR-005).
 - Enhancement never destroys item: success +1; blessing on success may +2; failure remains or rare regression -1; pity success bonus accumulates on failure and resets on success. Exact rates/costs remain tunable.
 - Equipment inventory/economy RNG and rewards must eventually be server authoritative; **do not build backend in prototype phase**.
 
@@ -69,6 +70,9 @@ Build a playable, mobile-first Unity 6 / C# idle action RPG **강화의 탑**. W
 ## 7. Forbidden shortcuts
 - Do not replace free-forward movement with 1/3/4 rigid lanes.
 - Do not make boss combat change to sidescroller, chase-camera, or rotate-camera without explicit approval.
-- Do not add manually controlled tower movement, player levels, skill levels, forced Rage in Challenge, or unlimited dodge/knockback stun locks.
+- Do not add manually controlled tower movement, unapproved independent skill leveling, forced Rage in Challenge, or unlimited dodge/knockback stun locks. Do not make auto skills replace manual boss Focus Guard. PvP and class-change systems remain deferred.
 - Do not treat examples/ranges as approved economy formulas.
 - Do not hallucinate finished assets, test results, server APIs, or prior implementation.
+
+## 8. Current growth documentation scope (2026-10-23)
+This change authorizes Markdown updates only. Do not implement level/EXP calculations, quest progress/rewards, two-skill execution, ScriptableObject schema changes, Unity scene changes, or a combat rewrite as part of it. Implementation requires a separate task; report the current gaps rather than presenting approved design as shipped behavior. Preserve prior ADRs and prototype validation history.

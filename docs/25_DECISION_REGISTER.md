@@ -1,5 +1,15 @@
 # Decision register (current, 2026-10-22)
 
+## 2026-10-23 USER-APPROVED level / quest / two auto skills — current
+
+- 캐릭터 레벨/몬스터 처치 경험치를 도입한다. 레벨 상한은 존재하며 **Lv.50은 우선 검토 후보**다. 환생 후에도 레벨을 유지한다. 기본 능력치의 보조 성장과 콘텐츠·스킬 해금이 역할이며 장비 강화가 주요 전투력 성장축이다. RP는 별도 환생 영구 성장으로 유지한다.
+- 기본 경험치는 전투로 획득하며 퀘스트 완료 여부로 정상적인 레벨업을 막지 않는다. 메인 퀘스트는 세계관·시스템 안내, 성장 퀘스트는 일반 플레이 목표·추가 경험치 또는 보상, 업적은 장기 기록·선택적 보상을 담당한다. 보상량/해금 레벨/경험치 곡선은 미확정이다.
+- 장착 구조는 무기1/갑옷1/반지2/오브1/**자동 스킬2슬롯**이다. 무기가 기본 공격·선호 거리·템포·넉백 등 전투 스타일의 중심이며 오브와 자동 스킬이 빌드를 보완한다. 두 슬롯의 해금 시점·동시 장착 제한·발동 우선순위·재사용 대기 규칙은 미확정이다. 별도 스킬 레벨/전직/PvP 시스템의 신규 도입은 승인하지 않았다.
+- 첫 시각적 공격 스킬 후보는 **전방 검기 방출**이다. 검을 휘둘러 전방으로 검기가 날아가 적을 공격하는 방향이며 이름/범위/관통 수/피해/쿨다운/강화 단계별 이펙트 변화 및 공용·무기 전용 분류는 미확정이다. 후보 등록이며 구현 완료가 아니다.
+- 자동 스킬은 보스의 **수동 집중 방어**를 자동 발동/자동 회피/자동 무적으로 대체하지 않는다. Rage는 Farming 전용 별도 수동 기능이다. 기존 레인 없는 자동 이동·고정 카메라·기본 공격 판정과 비주얼 목표를 유지한다.
+- 이번 승인은 **문서 설계 변경만**이다. 레벨/경험치/퀘스트/자동 스킬2개 실행, ScriptableObject 구조, Unity 씬, 기존 전투 코드를 변경하지 않는다. 구현 차이는 [29의 미충족 목록](29_LEVEL_QUEST_SKILL_SYSTEM.md#7-현재-구현과-신규-요구사항의-차이)에 분리했다.
+- 상세 기준은 [29_LEVEL_QUEST_SKILL_SYSTEM.md](29_LEVEL_QUEST_SKILL_SYSTEM.md), 배경은 [ADR-007](adr/ADR-007-character-level-and-unlocks.md)이다. [ADR-005](adr/ADR-005-no-character-level.md)의 무레벨 결정과 이전 자동 스킬1슬롯을 대체한다. 이번 범위에서는 본 절 >29 > 관련 GDD > 옛 supplement/ADR 순으로 해석한다. 기존 전투 표현은23, 비주얼 기술 검토는28, 실제 구현 이력은26을 따른다. 구현 이력은 최신 설계 완료의 근거가 아니다.
+
 ## 2026-10-23 USER-APPROVED visual goal — current
 
 > 약 4등신 캐릭터와 입체감 있는 쿼터뷰 환경으로 구성한 2.5D풍 픽셀 아트 RPG. 레인 없는 전방 중심 자유 자동전투를 사용하며 카메라 방향은 고정한다.
@@ -24,7 +34,7 @@
 - Monster-monster mild overlap; monster-player foot center separation; no endless backward kite; at retreat limit re-engage and fight.
 - Intro: initial Challenge entry may briefly establish hero location and enemies. User toggle to disable + skip, no full 50 enemy objects in advance; persistent Farming omits recurring intro. Visual ahead silhouettes are optional enhancement; gradual spawns are first implementation.
 - Challenge finite; Farming endless + offline settlement; Rage manual Farming-only; same art/scene logic with different flow rules.
-- Weapon/armor/rings2/orb/auto skill loadout; no character EXP/level and no skill leveling at MVP; RP rebirth progression.
+- Current loadout: weapon1/armor1/rings2/orb1/auto skills2. Character level/EXP supports stats and unlocks, persists through rebirth; equipment enhancement remains primary and RP remains separate. See the current approval above; independent skill leveling is not newly approved.
 - Enhancement no item destruction; pity/regression/blessing logic as defined in enhancement GDD.
 
 - 2026-10-22 USER-APPROVED: add configurable minimum/maximum damage, critical chance/multiplier and per-defender DEF to the prototype. Victim geometry and target caps remain unchanged. Each eligible hit rolls independently using a seeded damage stream separate from tactical choices; equal slash base coefficients do not guarantee identical final damage.
@@ -78,3 +88,8 @@
 - This authorizes a comparison slice, not final art, a permanent renderer choice or full project migration. Fixed40-degree Orthographic camera, code-drawn24x48/40PPU silhouettes and simple walls/pillars are tuning assumptions.
 - A Universal Renderer is appended as a camera-selectable option in the existing RP asset; default Renderer2D/quality selections remain unchanged. The comparison scene selects it only for the hybrid View. Authored material references retain the required shaders for builds.
 - Pure combat code, definitions, existing scene settings and manual Focus Guard are preserved. The new environment has no colliders and no actual height gameplay. Rendering/Editor validation status and user steps are recorded in26.
+
+## Superseded growth/loadout wording (history retained)
+- 이전 문구: `no character EXP/level and no skill leveling at MVP; RP rebirth progression`. 이 중 캐릭터 무레벨/무경험치와 RP만으로 모험가 성장을 설명한 부분은2026-10-23 레벨 도입 결정으로 대체한다. 스킬 자체 레벨 도입은 별도 승인하지 않았다.
+- 이전 자동 스킬1슬롯은2슬롯으로 대체한다.15/21의 오래된 오브2슬롯은 기존 오브1슬롯 기준과 충돌하던 표기이며 이번 변경으로 오브가2개가 되는 것은 아니다. 오브1/자동 스킬2로 정합성을 맞춘다.
+- ADR-005 원문은 삭제하지 않고 Superseded 상태와 ADR-007 링크를 둔다.26의 과거 구현·테스트 기록과28의 View 검토는 그대로 보존한다.

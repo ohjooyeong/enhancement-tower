@@ -5,7 +5,7 @@
 ## Priority
 1. `25_DECISION_REGISTER.md`: 확정/가설/보류, 충돌 우선순위
 2. `23_COMBAT_PRESENTATION_2026_10.md`: 2026-10 최신 전투 뷰·이동·조우·보스·원거리·타격감
-3. Canonical numbered docs `00`~`22` (보존한 GDD)
+3. 성장·퀘스트·스킬은 `29_LEVEL_QUEST_SKILL_SYSTEM.md` > 관련 canonical GDD `00`~`22`; 이외 주제는 해당 GDD 기준
 4. `adr/` 기존 결정 배경; `supplement_` 추가 메모 (현행 규칙과 충돌 시 현행 기준 우선)
 5. `24_DEVELOPMENT_START_GUIDE.md`: 환경 설치, `../AGENTS.md`: 코딩 에이전트 지침
 
@@ -50,3 +50,10 @@
 ## View 비교 구현
 
 사용자 승인 후 `CombatViewComparison` 비교 씬에서 기존2D/임시4등신+3D환경을 전환하는 최소 구현을 진행했다. 실행 방법과 최신 검증 상태는 `26_COMBAT_PROTOTYPE.md`의 View 비교 항목을 따른다. 최종 아트/렌더러 확정은 아니다.
+
+## Current level / quest / skill design (2026-10-23)
+
+- [29_LEVEL_QUEST_SKILL_SYSTEM.md](29_LEVEL_QUEST_SKILL_SYSTEM.md): 상한이 있는 캐릭터 레벨/전투 경험치·환생 후 레벨 유지·퀘스트/업적·무기 중심 빌드·자동 스킬2슬롯과 미구현 목록. Lv.50은 후보이며 코드/씬은 이번에 수정하지 않는다.
+- [ADR-007-character-level-and-unlocks.md](adr/ADR-007-character-level-and-unlocks.md): [ADR-005](adr/ADR-005-no-character-level.md)의 무레벨 결정을 대체. 과거 ADR/26 구현 이력은 보존한다.
+- 메인 퀘스트 미완료여도 몬스터 처치로 정상 레벨업한다. 강화가 주 성장축이며 레벨은 보조 성장·콘텐츠/스킬 해금, RP는 환생 영구 성장이다. 자동 스킬2슬롯은 보스 수동 집중 방어를 대체하지 않는다.
+- 기존28번은 View 기술 검토라 유지하고 새 통합 설계에29번을 사용했다. 비주얼 목표와 레인 없는 이동/고정 카메라/Farming 전용 Rage는 유지한다.

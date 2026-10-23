@@ -1,6 +1,9 @@
 # ADR-005: 캐릭터 레벨 제거
 
 ## Status
-Accepted
+Superseded — 2026-10-23 [ADR-007: 캐릭터 레벨 도입과 보조 성장·해금](ADR-007-character-level-and-unlocks.md)으로 대체.
+
+## 과거 결정 (원문 보존)
+다음은 이전 무레벨 결정이며 현재 규칙이 아니다. 현재 레벨·경험치·환생 보존·퀘스트/스킬 방향은 [29 통합 설계](../29_LEVEL_QUEST_SKILL_SYSTEM.md)를 따른다.
 
 캐릭터 레벨/EXP 시스템은 사용하지 않는다. 모험가 자체 성장은 환생 포인트(RP)로 통합한다.
