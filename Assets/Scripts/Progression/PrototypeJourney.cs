@@ -3,7 +3,7 @@ using System;
 namespace EnhancementTower.Progression
 {
     public enum JourneyRoster { Normal, Fast, Heavy, Boss }
-    public enum JourneyScreen { Camp, Stages, Combat, Result }
+    public enum JourneyScreen { Camp, Stages, Combat, Result, Travel }
     public sealed class JourneyStage
     {
         public readonly string Name, Description;
@@ -32,6 +32,9 @@ namespace EnhancementTower.Progression
         public JourneyStage Stage(int index) => Route[index];
         public int Unlocked { get; private set; } = 1;
         public int Current { get; private set; }
+        public int ReturnFloor { get; private set; }
+        public int Pending { get; private set; } = -1;
+        public bool TowerCleared { get; private set; }
         public int Attempts { get; private set; }
         public bool Active { get; private set; }
         public bool Cleared { get; private set; }
@@ -41,18 +44,29 @@ namespace EnhancementTower.Progression
         {
             if (screen != JourneyScreen.Camp && screen != JourneyScreen.Stages && !(screen == JourneyScreen.Combat && Active))
                 throw new InvalidOperationException("This screen requires a running encounter or a settled result.");
-            Screen = screen;
+            Pending = -1; Screen = screen;
+        }
+        public void PrepareEntry(int index)
+        {
+            if (!CanEnter(index)) throw new InvalidOperationException("Stage is locked.");
+            Pending = index; Active = false; Screen = JourneyScreen.Travel;
         }
         public void Begin(int index)
         {
             if (!CanEnter(index)) throw new InvalidOperationException("Stage is locked.");
+            Pending = -1; if (index < TowerCount) ReturnFloor = index;
             Current = index; Attempts++; Active = true; Cleared = false; Screen = JourneyScreen.Combat;
         }
         public bool Complete(bool clear)
         {
             if (!Active) return false;
             Active = false; Cleared = clear; Screen = JourneyScreen.Result;
-            if (clear && Current < TowerCount) Unlocked = Math.Min(TowerCount, Math.Max(Unlocked, Current + 2));
+            if (clear && Current < TowerCount)
+            {
+                Unlocked = Math.Min(TowerCount, Math.Max(Unlocked, Current + 2));
+                ReturnFloor = Math.Min(TowerCount - 1, Current + 1);
+                if (Current == TowerCount - 1) TowerCleared = true;
+            }
             return true;
         }
     }

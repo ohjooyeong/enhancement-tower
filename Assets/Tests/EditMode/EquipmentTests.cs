@@ -148,4 +148,32 @@ public class EquipmentTests
         Assert.IsFalse(route.CanEnter(-1)); Assert.IsFalse(route.CanEnter(5));
     }
 
+    [Test]
+    public void JourneyFarmingAndForgeKeepTheBlockedFloorAsReturnTarget()
+    {
+        var flow = new PrototypeJourney();
+        flow.Begin(0); flow.Complete(true); Assert.AreEqual(1, flow.ReturnFloor);
+        flow.Begin(1); flow.Complete(true); flow.Begin(2); flow.Complete(false);
+        Assert.AreEqual(2, flow.ReturnFloor);
+        flow.Navigate(JourneyScreen.Camp); flow.Begin(PrototypeJourney.SupplyIndex); flow.Complete(true);
+        flow.Navigate(JourneyScreen.Camp); Assert.AreEqual(2, flow.ReturnFloor);
+        flow.PrepareEntry(flow.ReturnFloor); Assert.AreEqual(JourneyScreen.Travel, flow.Screen);
+        Assert.IsFalse(flow.Active); Assert.AreEqual(2, flow.Pending);
+        Assert.IsFalse(flow.Complete(true)); Assert.AreEqual(3, flow.Unlocked);
+        flow.Begin(flow.Pending); Assert.AreEqual(2, flow.Current);
+    }
+    [Test]
+    public void JourneyTravelDoesNotStartOrRewardAFightAndCanBeCancelled()
+    {
+        var flow = new PrototypeJourney();
+        Assert.Throws<InvalidOperationException>(() => flow.PrepareEntry(3));
+        flow.PrepareEntry(0); Assert.AreEqual(0, flow.Attempts);
+        flow.Navigate(JourneyScreen.Camp); Assert.AreEqual(-1, flow.Pending);
+        Assert.IsFalse(flow.Active); Assert.IsFalse(flow.TowerCleared);
+        for (int floor = 0; floor < 4; floor++) { flow.Begin(floor); flow.Complete(true); }
+        Assert.IsTrue(flow.TowerCleared); Assert.AreEqual(3, flow.ReturnFloor);
+        flow.Begin(PrototypeJourney.SupplyIndex); flow.Complete(true);
+        Assert.IsTrue(flow.TowerCleared); Assert.AreEqual(3, flow.ReturnFloor);
+    }
+
 }

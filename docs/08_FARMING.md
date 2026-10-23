@@ -39,3 +39,5 @@ Reward = ExpectedFarmingRate × ElapsedTime × OfflineEfficiency
 
 ## 현재 플레이 흐름과의 구분
 [31](31_JOURNEY_PLAY_FLOW.md)의 Supply Run은4마리 유한 재료 보충 비교 전투다. 위 지속 스폰/자동 재시도·추천 지역/오프라인 정산/Rage 구현 완료로 해석하지 않는다.
+
+JourneyPrototype의 FARM MATERIALS 버튼은 위 유한 보충 전투를 가리킨다. UI 이름 변경으로 지속 Farming이 구현된 것은 아니다. 실패한 탑 층을 유지하며 재료 보충/강화 후 돌아가는 연결만 추가했다.

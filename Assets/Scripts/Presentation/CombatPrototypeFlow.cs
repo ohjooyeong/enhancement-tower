@@ -20,7 +20,10 @@ namespace EnhancementTower.Presentation
         private bool journeyDirty;
         private Vector2 journeySize;
         private int selectedItem;
-        private float forgeUntil, nextHudUpdate;
+        private float forgeUntil, nextHudUpdate, travelUntil, continueAt;
+        private Text travelLabel, continueLabel;
+        private Image travelProgress;
+        private bool AutoContinue => journey.Screen == JourneyScreen.Result && journey.Cleared && journey.Current < PrototypeJourney.TowerCount - 2;
         private string forgeNotice = "Choose equipment, enhance it, then challenge the tower.";
         private string journeyResult = "Your first ascent starts at the gate.";
         private Color noticeColor = new Color(.55f, .82f, .77f);
@@ -69,16 +72,27 @@ namespace EnhancementTower.Presentation
             if ((journeySize - journeyRoot.rect.size).sqrMagnitude > .25f) { journeySize = journeyRoot.rect.size; journeyDirty = true; }
             if (forgeUntil > 0 && Time.unscaledTime >= forgeUntil) { forgeUntil = 0; RefreshJourneyCamp(); }
             if (journeyDirty && journeyRoot.rect.width > 0) BuildJourneyPage();
+            UpdateJourneyViewport();
             workshopOpen = journey.Screen != JourneyScreen.Combat;
+            if (journey.Screen == JourneyScreen.Travel)
+            {
+                if (travelProgress != null) travelProgress.fillAmount = Mathf.Clamp01(1 - (travelUntil - Time.unscaledTime) / .9f);
+                if (Time.unscaledTime >= travelUntil) StartJourneyEncounter(journey.Pending);
+                return;
+            }
+            if (AutoContinue && continueAt > 0)
+            {
+                if (continueLabel != null) continueLabel.text = $"Ascending to floor {journey.Current + 2} in {Mathf.Max(0, continueAt - Time.unscaledTime):F1}s / Camp stops the ascent";
+                if (Time.unscaledTime >= continueAt) EnterJourney(journey.Current + 1);
+            }
             if (journey.Screen != JourneyScreen.Combat || Time.unscaledTime < nextHudUpdate) return;
             nextHudUpdate = Time.unscaledTime + .1f;
             var hero = simulation.Hero;
-            journeyHeroText.text = $"HP {hero.Health} / {hero.MaxHealth}     ATK {hero.Damage}  DEF {hero.Defense}";
+            journeyHeroText.text = $"HP {hero.Health} / {hero.MaxHealth}";
             journeyHealthFill.fillAmount = hero.Health / (float)hero.MaxHealth;
             var config = journey.Stage(journey.Current);
             float remaining = Mathf.Max(0, config.Seconds - simulation.Ticks / 60f);
-            journeyStatusText.text = bossMode ? $"{simulation.BossPhase}  |  {remaining:F0}s left\nBoss HP {simulation.Monster.Health}/{simulation.Monster.MaxHealth}" :
-                $"Defeated {stage.Kills}/{config.Total}  |  {remaining:F0}s left\nEnemies {simulation.LivingMonsters}  /  Arrivals remaining {stage.Pending}";
+            journeyStatusText.text = bossMode ? $"BOSS {simulation.Monster.Health}/{simulation.Monster.MaxHealth}  |  {remaining:F0}s" : $"DEFEATED {stage.Kills}/{config.Total}  |  {remaining:F0}s";
             if (journeyGuard != null)
             {
                 journeyGuard.interactable = simulation.GuardSecondsRemaining <= 0;
@@ -87,7 +101,7 @@ namespace EnhancementTower.Presentation
         }
         private void SettleJourney()
         {
-            if (!journey.Active) return;
+            if (!journey.Active || journey.Screen == JourneyScreen.Travel) return;
             var config = journey.Stage(journey.Current);
             bool clear = stage != null ? stage.Result == StageResult.Clear : simulation.Hero.Alive && simulation.LivingMonsters == 0;
             bool timeout = stage != null ? stage.Result == StageResult.Timeout : simulation.Ticks >= config.Seconds * 60;
@@ -97,13 +111,19 @@ namespace EnhancementTower.Presentation
             bool rewarded = clear && equipment.RewardMaterialRun(equipmentRun, config.Gold, config.Stones);
             long damage = 0; foreach (var enemy in simulation.Monsters) damage += enemy.DamageTaken;
             string verdict = clear ? "CLEAR" : defeat ? "DEFEAT" : "TIME UP";
-            journeyResult = $"{verdict}  /  {config.Name}\n\nTime  {simulation.Ticks / 60f:F1}s\nDefeated  {simulation.Monsters.Count - simulation.LivingMonsters}/{config.Total}\nDamage dealt  {damage}\nHP remaining  {simulation.Hero.Health}/{simulation.Hero.MaxHealth}\nRun stats  ATK {runStats.Attack} / DEF {runStats.Defense}\n\n" +
+            journeyResult = $"{verdict}  /  {(journey.Current == PrototypeJourney.SupplyIndex ? "MATERIAL FARM" : config.Name)}\n\nTime  {simulation.Ticks / 60f:F1}s\nDefeated  {simulation.Monsters.Count - simulation.LivingMonsters}/{config.Total}\nDamage dealt  {damage}\nHP remaining  {simulation.Hero.Health}/{simulation.Hero.MaxHealth}\nRun stats  ATK {runStats.Attack} / DEF {runStats.Defense}\n\n" +
                 (rewarded ? $"REWARDS   +{config.Gold} Gold / +{config.Stones} Stones" : "No clear rewards. Equipment and materials are retained.");
-            forgeNotice = clear ? "Clear rewards received. Strengthen your gear or climb higher." : "Try enhancing your weapon or armor, or gather materials in Supply Run.";
+            forgeNotice = clear ? journey.Current == PrototypeJourney.SupplyIndex ? $"Materials gathered. Enhance, then return to floor {journey.ReturnFloor + 1}." : journey.TowerCleared ? "All 4 prototype floors cleared. You can replay the route." : $"Floor {journey.Current + 1} cleared. The next floor awaits." : journey.Current == PrototypeJourney.SupplyIndex ? $"Material run failed. Retry or enhance. Floor {journey.ReturnFloor + 1} is waiting." : $"Blocked at floor {journey.Current + 1}. Farm materials, enhance, and return.";
+            continueAt = AutoContinue ? Time.unscaledTime + 2.5f : 0;
             workshopOpen = true; journeyDirty = true;
         }
-        private void OpenJourney(JourneyScreen screen) { journey.Navigate(screen); journeyDirty = true; }
+        private void OpenJourney(JourneyScreen screen) { continueAt = 0; journey.Navigate(screen); journeyDirty = true; }
         private void EnterJourney(int index)
+        {
+            continueAt = 0; journey.PrepareEntry(index); travelUntil = Time.unscaledTime + .9f;
+            workshopOpen = true; journeyDirty = true;
+        }
+        private void StartJourneyEncounter(int index)
         {
             journey.Begin(index); materialRun = wallTest = trapTest = false;
             bossMode = journey.Stage(index).Roster == JourneyRoster.Boss; stageMode = !bossMode;
@@ -143,14 +163,16 @@ namespace EnhancementTower.Presentation
             journeyPage = UiRect("Screen " + journey.Screen, journeyRoot, new Rect(0, 0, PageWidth, PageHeight));
             // Screen changes are opaque. Data refreshes keep their existing input targets alive.
             journeyButtons.Clear(); campSelectors = null;
-            journeyHeroText = journeyStatusText = journeyGuardText = null; journeyGuard = null;
+            journeyHeroText = journeyStatusText = journeyGuardText = continueLabel = travelLabel = null; journeyGuard = null; travelProgress = null;
             float w = PageWidth, h = PageHeight;
             bool combat = journey.Screen == JourneyScreen.Combat;
+            if (combat) { BuildBattleHud(w, h); return; }
+            if (journey.Screen == JourneyScreen.Travel) { BuildAscent(w, h); return; }
             if (!combat) Panel("Background", journeyPage, new Rect(0, 0, w, h), Ink);
             Panel("Header", journeyPage, new Rect(0, 0, w, 94), Ink);
             Words(journeyPage, new Rect(20, 14, w - 40, 20), "ENHANCEMENT TOWER", 12, Accent);
-            Words(journeyPage, new Rect(20, 38, w - 40, 30), combat ? journey.Stage(journey.Current).Name : journey.Screen == JourneyScreen.Camp ? "CAMP / FORGE" : journey.Screen == JourneyScreen.Stages ? "CHOOSE YOUR CHALLENGE" : "ENCOUNTER RESULT", 22);
-            journeyWallet = Words(journeyPage, new Rect(20, 72, w - 40, 20), $"GOLD {equipment.Gold}    STONES {equipment.Stones}    ROUTE {journey.Unlocked}/4", 12, Muted);
+            Words(journeyPage, new Rect(20, 38, w - 40, 30), combat ? journey.Stage(journey.Current).Name : journey.Screen == JourneyScreen.Camp ? "CAMP / FORGE" : journey.Screen == JourneyScreen.Stages ? "TOWER / FLOORS" : "ENCOUNTER RESULT", 22);
+            journeyWallet = Words(journeyPage, new Rect(20, 72, w - 40, 20), $"GOLD {equipment.Gold}    STONES {equipment.Stones}    TARGET {journey.ReturnFloor + 1}F", 12, Muted);
             if (journey.Screen == JourneyScreen.Camp) BuildCamp(w, h);
             else if (journey.Screen == JourneyScreen.Stages) BuildStageSelection(w, h);
             else if (journey.Screen == JourneyScreen.Result) BuildJourneyResult(w, h);
@@ -185,7 +207,9 @@ namespace EnhancementTower.Presentation
             Panel("Forge result", journeyPage, new Rect(16, 460, w - 32, 94), Card);
             campNotice = Words(journeyPage, new Rect(28, 470, w - 56, 74), forgeNotice, 14, noticeColor);
             if (journey.Active) Action(journeyPage, new Rect(16, h - 144, w - 32, 42), "RESUME PAUSED ENCOUNTER", () => OpenJourney(JourneyScreen.Combat));
-            Action(journeyPage, new Rect(16, h - 94, w - 32, 50), "CHOOSE STAGE  >", () => OpenJourney(JourneyScreen.Stages), primary: true);
+            else Action(journeyPage, new Rect(16, h - 144, (w - 44) / 2, 42), "FARM MATERIALS", () => EnterJourney(PrototypeJourney.SupplyIndex));
+            if (!journey.Active) Action(journeyPage, new Rect(28 + (w - 44) / 2, h - 144, (w - 44) / 2, 42), "TOWER MAP", () => OpenJourney(JourneyScreen.Stages));
+            Action(journeyPage, new Rect(16, h - 94, w - 32, 50), $"CHALLENGE FLOOR {journey.ReturnFloor + 1}  >", () => EnterJourney(journey.ReturnFloor), primary: true);
             Words(journeyPage, new Rect(20, h - 32, w - 40, 22), "No item destruction. Progress lasts for this Play session.", 11, Muted);
             RefreshJourneyCamp();
         }
@@ -194,7 +218,7 @@ namespace EnhancementTower.Presentation
             if (journey.Screen != JourneyScreen.Camp || campSelectors == null) return;
             bool ready = forgeUntil <= 0;
             foreach (var button in journeyButtons) button.interactable = ready;
-            journeyWallet.text = $"GOLD {equipment.Gold}    STONES {equipment.Stones}    ROUTE {journey.Unlocked}/4";
+            journeyWallet.text = $"GOLD {equipment.Gold}    STONES {equipment.Stones}    TARGET {journey.ReturnFloor + 1}F";
             var stats = equipment.Stats(heroHealth, heroDamage, damageDefinition != null ? damageDefinition.heroDefense : 1);
             campStats.text = $"NEXT RUN   ATK {stats.Attack}  /  DEF {stats.Defense}  /  HP {stats.Health}";
             for (int i = 0; i < campSelectors.Length; i++)
@@ -227,46 +251,78 @@ namespace EnhancementTower.Presentation
         }
         private void BuildStageSelection(float w, float h)
         {
-            Words(journeyPage, new Rect(20, 102, w - 40, 36), journey.Active ? "Starting a stage replaces the paused fight with full HP." : "Clear a stage to unlock the next. Boss entry is manual.", 13, Muted);
+            Words(journeyPage, new Rect(20, 102, w - 40, 36), journey.Active ? "Starting a stage replaces the paused fight with full HP." : $"ASCENT TARGET: FLOOR {journey.ReturnFloor + 1} / 4. Boss entry is manual.", 13, Muted);
             for (int i = 0; i < PrototypeJourney.TowerCount; i++)
             {
-                int index = i; var config = journey.Stage(i); float y = 148 + i * 90;
+                int index = i; var config = journey.Stage(i); float y = 148 + (PrototypeJourney.TowerCount - 1 - i) * 90;
                 Panel("Stage card", journeyPage, new Rect(16, y, w - 32, 80), Card);
-                Words(journeyPage, new Rect(28, y + 8, w - 142, 24), config.Name, 17, journey.CanEnter(i) ? Color.white : Muted);
+                Words(journeyPage, new Rect(28, y + 8, w - 142, 24), $"{i + 1}F  {config.Name.Substring(4)}", 17, journey.CanEnter(i) ? Color.white : Muted);
                 Words(journeyPage, new Rect(28, y + 34, w - 142, 38), $"{config.Description}\n{config.Total} foes / {config.Seconds:F0}s / {config.Gold}G + {config.Stones}S", 11, Muted);
-                Action(journeyPage, new Rect(w - 106, y + 18, 78, 44), journey.CanEnter(i) ? "ENTER" : "LOCKED", () => EnterJourney(index), journey.CanEnter(i), journey.CanEnter(i));
+                Action(journeyPage, new Rect(w - 106, y + 18, 78, 44), journey.CanEnter(i) ? i == journey.ReturnFloor ? "TARGET" : "REPLAY" : "LOCKED", () => EnterJourney(index), journey.CanEnter(i), journey.CanEnter(i));
             }
-            Action(journeyPage, new Rect(16, 518, w - 32, 52), "SUPPLY RUN   /   Earn 40G + 3 Stones", () => EnterJourney(PrototypeJourney.SupplyIndex));
-            Words(journeyPage, new Rect(20, 578, w - 40, 40), "Supply Run is a short repeatable encounter.\nFailing a stage keeps your equipment and materials.", 12, Muted);
+            Action(journeyPage, new Rect(16, 518, w - 32, 52), "FARM MATERIALS   /   Earn 40G + 3 Stones", () => EnterJourney(PrototypeJourney.SupplyIndex));
+            Words(journeyPage, new Rect(20, 578, w - 40, 40), $"Gather materials, enhance, then return to floor {journey.ReturnFloor + 1}.\nThis is a short supply encounter, not endless Farming.", 12, Muted);
             Action(journeyPage, new Rect(16, h - 74, w - 32, 50), "<  BACK TO CAMP", () => OpenJourney(JourneyScreen.Camp));
         }
         private void BuildJourneyResult(float w, float h)
         {
             Panel("Result card", journeyPage, new Rect(16, 110, w - 32, 320), Card);
             Words(journeyPage, new Rect(30, 126, w - 60, 288), journeyResult, 17, journey.Cleared ? Gold : Color.white);
-            Words(journeyPage, new Rect(20, 444, w - 40, 58), forgeNotice, 15, Muted);
+            Words(journeyPage, new Rect(20, 440, w - 40, 36), forgeNotice, 15, Muted);
+            continueLabel = Words(journeyPage, new Rect(20, h - 232, w - 40, 32), "", 12, Gold);
             bool next = journey.Cleared && journey.Current < PrototypeJourney.TowerCount - 1;
-            if (next) Action(journeyPage, new Rect(16, h - 200, w - 32, 48), journey.Current == 2 ? "ENTER BOSS GATE  >" : "NEXT STAGE  >", () => EnterJourney(journey.Current + 1), primary: true);
+            if (next) Action(journeyPage, new Rect(16, h - 200, w - 32, 48), journey.Current == 2 ? "ENTER BOSS GATE  >" : "NEXT FLOOR  >", () => EnterJourney(journey.Current + 1), primary: true);
+            if (journey.Current == PrototypeJourney.SupplyIndex)
+                Action(journeyPage, new Rect(16, h - 200, w - 32, 48), $"RETURN TO FLOOR {journey.ReturnFloor + 1}", () => EnterJourney(journey.ReturnFloor), primary: true);
+            else if (!journey.Cleared)
+                Action(journeyPage, new Rect(16, h - 200, w - 32, 48), "FARM MATERIALS", () => EnterJourney(PrototypeJourney.SupplyIndex), primary: true);
             Action(journeyPage, new Rect(16, h - 144, (w - 44) / 2, 48), "RETRY", () => EnterJourney(journey.Current));
-            Action(journeyPage, new Rect(28 + (w - 44) / 2, h - 144, (w - 44) / 2, 48), "STAGES", () => OpenJourney(JourneyScreen.Stages));
+            Action(journeyPage, new Rect(28 + (w - 44) / 2, h - 144, (w - 44) / 2, 48), "TOWER MAP", () => OpenJourney(JourneyScreen.Stages));
             Action(journeyPage, new Rect(16, h - 88, w - 32, 52), "RETURN TO FORGE", () => OpenJourney(JourneyScreen.Camp), primary: !next);
+        }
+        private void UpdateJourneyViewport()
+        {
+            bool combat = journey.Screen == JourneyScreen.Combat;
+            float scale = journeyCanvas.scaleFactor;
+            float bottom = combat ? 132 * scale : 0, top = combat ? 30 * scale : 0;
+            // Canvas and camera use the render target's pixels. Editor Screen.height can differ.
+            float pixelsHigh = Mathf.Max(1, journeyCanvas.pixelRect.height);
+            Vector2 min = journeyRoot.anchorMin, max = journeyRoot.anchorMax;
+            viewCamera.rect = new Rect(min.x, min.y + bottom / pixelsHigh,
+                max.x - min.x, Mathf.Max(.01f, max.y - min.y - (bottom + top) / pixelsHigh));
+            viewCamera.ResetAspect();
+        }
+        private void BuildAscent(float w, float h)
+        {
+            Panel("Ascent background", journeyPage, new Rect(0, 0, w, h), Ink);
+            bool supply = journey.Pending == PrototypeJourney.SupplyIndex;
+            Words(journeyPage, new Rect(24, h * .25f, w - 48, 26), supply ? "GATHER MATERIALS" : "ASCENDING THE TOWER", 18, Accent);
+            travelLabel = Words(journeyPage, new Rect(24, h * .25f + 38, w - 48, 48), supply ? "SUPPLY CAMP" : $"FLOOR {journey.Pending + 1} / {PrototypeJourney.TowerCount}", 30, Gold);
+            Words(journeyPage, new Rect(24, h * .25f + 94, w - 48, 48), supply ? $"Your challenge at floor {journey.ReturnFloor + 1} is waiting." : journey.Stage(journey.Pending).Description, 15, Muted);
+            for (int i = 0; i < 4; i++)
+                Panel("Stair", journeyPage, new Rect(w * .25f + i * 26, h * .5f + 80 - i * 22, 28, 10 + i * 22), i == journey.Pending ? Gold : Card);
+            Panel("Travel track", journeyPage, new Rect(24, h * .75f, w - 48, 6), Card);
+            travelProgress = Panel("Ascent progress", journeyPage, new Rect(24, h * .75f, w - 48, 6), Accent);
+            travelProgress.type = Image.Type.Filled; travelProgress.fillMethod = Image.FillMethod.Horizontal; travelProgress.fillAmount = 0;
         }
         private void BuildBattleHud(float w, float h)
         {
-            Panel("Battle stats", journeyPage, new Rect(0, 94, w, 92), Ink);
-            journeyHeroText = Words(journeyPage, new Rect(20, 98, w - 40, 22), "", 14);
-            Panel("Health track", journeyPage, new Rect(20, 124, w - 40, 7), Card);
-            journeyHealthFill = Panel("Health", journeyPage, new Rect(20, 124, w - 40, 7), Accent);
+            bool supply = journey.Current == PrototypeJourney.SupplyIndex;
+            Panel("Floor strip", journeyPage, new Rect(0, 0, w, 30), Ink);
+            Words(journeyPage, new Rect(16, 5, w - 32, 22), supply ? $"MATERIAL FARM  /  Return target: {journey.ReturnFloor + 1}F" : $"TOWER   {journey.Current + 1}F / {PrototypeJourney.TowerCount}F   {journey.Stage(journey.Current).Name.Substring(4)}", 13, Gold);
+            Panel("Bottom HUD", journeyPage, new Rect(0, h - 132, w, 132), Ink);
+            journeyHeroText = Words(journeyPage, new Rect(16, h - 124, 150, 20), "", 13);
+            Panel("Health track", journeyPage, new Rect(174, h - 118, w - 190, 6), Card);
+            journeyHealthFill = Panel("Health", journeyPage, new Rect(174, h - 118, w - 190, 6), Accent);
             journeyHealthFill.type = Image.Type.Filled; journeyHealthFill.fillMethod = Image.FillMethod.Horizontal;
-            journeyStatusText = Words(journeyPage, new Rect(20, 138, w - 40, 44), "", 13, Muted);
-            Action(journeyPage, new Rect(16, h - 70, 112, 48), "CAMP / PAUSE", () => OpenJourney(JourneyScreen.Camp));
+            journeyStatusText = Words(journeyPage, new Rect(16, h - 96, w - 32, 24), "", 13, Muted);
+            Action(journeyPage, new Rect(16, h - 60, 112, 46), "CAMP / PAUSE", () => OpenJourney(JourneyScreen.Camp));
             if (bossMode)
             {
-                journeyGuard = Action(journeyPage, new Rect(140, h - 70, w - 156, 48), "FOCUS GUARD", () => simulation.RequestBossGuard(), primary: true);
+                journeyGuard = Action(journeyPage, new Rect(140, h - 60, w - 156, 46), "FOCUS GUARD", () => simulation.RequestBossGuard(), primary: true);
                 journeyGuardText = journeyGuard.GetComponentInChildren<Text>();
-                Words(journeyPage, new Rect(16, h - 104, w - 32, 28), "Read the warning. Guard the impact, not the windup.", 12, Gold);
             }
-            else Words(journeyPage, new Rect(140, h - 62, w - 156, 38), "Automatic movement and attacks.\nClear the field before time runs out.", 12, Muted);
+            else Words(journeyPage, new Rect(140, h - 56, w - 156, 38), supply ? "Gather, enhance, challenge again." : "Clear this floor to climb higher.", 13, Muted);
         }
         private void DisposeJourney()
         {
