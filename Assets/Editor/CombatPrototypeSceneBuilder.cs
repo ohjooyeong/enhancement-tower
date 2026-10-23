@@ -2,6 +2,8 @@ using EnhancementTower.Presentation;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 public static class CombatPrototypeSceneBuilder
 {
@@ -25,6 +27,68 @@ public static class CombatPrototypeSceneBuilder
             AssetDatabase.LoadAssetAtPath<EnhancementTower.Data.StageDefinition>("Assets/Data/PrototypeStage.asset");
         serialized.ApplyModifiedPropertiesWithoutUndo();
         EditorSceneManager.SaveScene(scene, "Assets/Scenes/CombatPrototype.unity");
+    }
+    [MenuItem("Enhancement Tower/Create View Comparison Scene")]
+    public static void CreateViewComparison()
+    {
+        const string path = "Assets/Scenes/CombatViewComparison.unity";
+        if (AssetDatabase.LoadAssetAtPath<SceneAsset>(path) != null)
+        {
+            if (!Application.isBatchMode && EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
+                EditorSceneManager.OpenScene(path);
+            return;
+        }
+        if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+        var pipeline = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
+        if (pipeline == null) throw new System.InvalidOperationException("The view comparison requires the current Universal RP asset.");
+        const string rendererPath = "Assets/Settings/ViewComparisonRenderer.asset";
+        var renderer = AssetDatabase.LoadAssetAtPath<UniversalRendererData>(rendererPath);
+        if (renderer == null)
+        {
+            renderer = ScriptableObject.CreateInstance<UniversalRendererData>();
+            AssetDatabase.CreateAsset(renderer, rendererPath);
+        }
+        Material CreateMaterial(string materialPath, string shaderName)
+        {
+            var material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
+            if (material != null) return material;
+            var shader = Shader.Find(shaderName);
+            if (shader == null) throw new System.InvalidOperationException("Missing comparison shader: " + shaderName);
+            material = new Material(shader); AssetDatabase.CreateAsset(material, materialPath); return material;
+        }
+        var spriteMaterial = CreateMaterial("Assets/Settings/ViewComparisonSprite.mat", "Universal Render Pipeline/2D/Sprite-Unlit-Default");
+        var stoneMaterial = CreateMaterial("Assets/Settings/ViewComparisonStone.mat", "Universal Render Pipeline/Unlit");
+        var settings = new SerializedObject(pipeline);
+        var list = settings.FindProperty("m_RendererDataList");
+        int index = -1;
+        for (int i = 0; i < list.arraySize; i++)
+            if (list.GetArrayElementAtIndex(i).objectReferenceValue == renderer) index = i;
+        if (index < 0)
+        {
+            index = list.arraySize; list.arraySize++;
+            list.GetArrayElementAtIndex(index).objectReferenceValue = renderer;
+            settings.ApplyModifiedPropertiesWithoutUndo();
+        }
+        // Only append a camera-selectable renderer; never change the default renderer or quality levels.
+        var scene = EditorSceneManager.OpenScene("Assets/Scenes/CombatPrototype.unity");
+        CombatPrototype prototype = null;
+        foreach (GameObject root in scene.GetRootGameObjects())
+        {
+            prototype = root.GetComponentInChildren<CombatPrototype>();
+            if (prototype != null) break;
+        }
+        if (prototype == null) throw new System.InvalidOperationException("CombatPrototype component missing from source scene.");
+        var serialized = new SerializedObject(prototype);
+        serialized.FindProperty("enableViewComparison").boolValue = true;
+        serialized.FindProperty("comparisonRendererIndex").intValue = index;
+        serialized.FindProperty("comparisonSpriteMaterial").objectReferenceValue = spriteMaterial;
+        serialized.FindProperty("comparisonStoneMaterial").objectReferenceValue = stoneMaterial;
+        serialized.FindProperty("randomizeSeedEachRun").boolValue = false;
+        serialized.ApplyModifiedPropertiesWithoutUndo();
+        EditorSceneManager.SaveScene(scene, path, true);
+        EditorSceneManager.OpenScene(path);
+        AssetDatabase.SaveAssets();
+        Debug.Log("View comparison scene created; original scene and default renderer preserved.");
     }
     [MenuItem("Enhancement Tower/Create Default Combo Asset")]
     public static void CreateComboAsset()

@@ -31,6 +31,7 @@ namespace EnhancementTower.Presentation
         public int PresentedHits { get; private set; }
         public bool Effects = true, Numbers = true, Sound = true;
         public float Volume = 0.18f;
+        public System.Func<Point, float, Vector3> ProjectPoint;
 
         public PrototypeCombatFeedback(Transform parent, Sprite sprite)
         {
@@ -149,7 +150,8 @@ namespace EnhancementTower.Presentation
             if (!Numbers || state.NumberTime <= 0) return;
             if (numberStyle == null) numberStyle = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
             numberStyle.fontSize = Mathf.RoundToInt(Mathf.Clamp(Screen.height / 55f, 14, 28) * (state.Critical ? 1.2f : 1));
-            Vector3 world = state.NumberOrigin + Vector3.up * ((1 - state.NumberTime / 0.65f) * 0.45f);
+            float rise = (1 - state.NumberTime / 0.65f) * 0.45f;
+            Vector3 world = ProjectPoint != null ? ProjectPoint(new Point(state.NumberOrigin.x, state.NumberOrigin.y - .85f), .85f + rise) : state.NumberOrigin + Vector3.up * rise;
             Vector3 screen = camera.WorldToScreenPoint(world);
             if (screen.z <= 0) return;
             var rect = new Rect(screen.x - 110, Screen.height - screen.y - 22, 220, 44);

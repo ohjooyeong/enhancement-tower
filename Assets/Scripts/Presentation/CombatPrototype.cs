@@ -1,6 +1,8 @@
 using EnhancementTower.Combat;
 using EnhancementTower.Data;
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 namespace EnhancementTower.Presentation
 {
@@ -53,9 +55,23 @@ namespace EnhancementTower.Presentation
         private ActorView heroView;
         private ActorView[] monsterViews;
         private Camera viewCamera;
+        [SerializeField] private bool enableViewComparison;
+        [SerializeField] private int comparisonRendererIndex = -1;
+        [SerializeField] private Material comparisonSpriteMaterial, comparisonStoneMaterial;
+        private bool quarterView = true;
+        private QuarterViewStage quarterStage;
+        private SpriteRenderer flatArena;
+        private int actorViewSequence;
+        private bool QuarterView => quarterStage != null && quarterView;
+        private Vector3 DisplayPoint(Point p, float height = 0) => QuarterView ? QuarterViewStage.Ground(p) + viewCamera.transform.up * height : new Vector3(p.X, p.Y + height, 0);
+        private Vector2 DisplayVector(Point p) => QuarterView ? (Vector2)QuarterViewStage.BillboardDelta(p) : new Vector2(p.X, p.Y);
         private sealed class ActorView
         {
             public Transform Root, Facing, Slash, Windup;
+            public QuarterViewStage.Actor QuarterActor;
+            public SortingGroup Group;
+            public int StableOrder;
+            public SpriteRenderer Foot;
             public SpriteRenderer WindupRenderer;
             public PrototypeCombatFeedback.ActorFeedback Feedback;
             public SpriteRenderer Body, Blade, Direction, HealthBack, HealthFill, TargetMarker;
@@ -73,13 +89,28 @@ namespace EnhancementTower.Presentation
             feedback = new PrototypeCombatFeedback(transform, square);
             viewCamera.orthographic = true; viewCamera.backgroundColor = new Color(0.07f, 0.09f, 0.12f);
             cameraObject.transform.SetPositionAndRotation(new Vector3(0, 0.6f, -10), Quaternion.identity);
-            MakeSprite("Arena", transform, new Vector3(0, 0.5f, 0), new Vector2(4.56f, 7.56f), new Color(0.15f, 0.19f, 0.21f), -1000);
+            flatArena = MakeSprite("Arena", transform, new Vector3(0, 0.5f, 0), new Vector2(4.56f, 7.56f), new Color(0.15f, 0.19f, 0.21f), -1000);
+            if (enableViewComparison && comparisonRendererIndex >= 0)
+                quarterStage = new QuarterViewStage(transform, comparisonSpriteMaterial, comparisonStoneMaterial);
+            feedback.ProjectPoint = DisplayPoint;
+            ConfigureView();
             heroView = MakeActor("Hero", new Color(0.25f, 0.7f, 0.95f));
             var guide = new GameObject("Attack area guide"); guide.transform.SetParent(heroView.Root, false);
             attackArea = guide.AddComponent<LineRenderer>(); attackArea.useWorldSpace = false;
             attackArea.sharedMaterial = heroView.Body.sharedMaterial; attackArea.positionCount = 19;
             attackArea.startWidth = attackArea.endWidth = 0.018f; attackArea.enabled = false;
             Restart();
+        }
+        private void ConfigureView()
+        {
+            bool hybrid = QuarterView;
+            flatArena.enabled = !hybrid;
+            if (quarterStage != null) quarterStage.Root.gameObject.SetActive(hybrid);
+            var data = viewCamera.GetUniversalAdditionalCameraData();
+            data.SetRenderer(hybrid ? comparisonRendererIndex : -1);
+            Quaternion rotation = hybrid ? quarterStage.Rotation : Quaternion.identity;
+            Vector3 target = hybrid ? new Vector3(0, .3f, .5f) : new Vector3(0, .6f, 0);
+            viewCamera.transform.SetPositionAndRotation(target - rotation * Vector3.forward * (hybrid ? 12 : 10), rotation);
         }
         private void Restart()
         {
@@ -100,6 +131,7 @@ namespace EnhancementTower.Presentation
             if (monsterViews != null)
                 for (int i = 0; i < monsterViews.Length; i++)
                     if (monsterViews[i] != null) Destroy(monsterViews[i].Root.gameObject);
+            actorViewSequence = 1;
             stage = null;
             bool finite = stageMode && !bossMode && !wallTest && !trapTest;
             StageSettings stageSettings = finite ? (stageDefinition != null ? stageDefinition.Snapshot() : new StageSettings()) : null;
@@ -180,19 +212,24 @@ namespace EnhancementTower.Presentation
         private ActorView MakeActor(string label, Color color)
         {
             var root = new GameObject(label).transform; root.SetParent(transform, false);
-            var result = new ActorView { Root = root, Color = color };
-            MakeSprite("Foot", root, Vector3.zero, new Vector2(0.56f, 0.18f), Color.black, 0);
+            var result = new ActorView { Root = root, Color = color, StableOrder = actorViewSequence++ };
+            result.Foot = MakeSprite("Foot", root, Vector3.zero, new Vector2(0.56f, 0.18f), Color.black, 0);
             result.Body = MakeSprite("Body", root, new Vector3(0, 0.3f, 0), new Vector2(0.4f, 0.6f), color, 1);
             result.Direction = MakeSprite("Four Direction", root, Vector3.zero, new Vector2(0.13f, 0.13f), Color.white, 2);
             result.Facing = result.Direction.transform;
-            result.HealthBack = MakeSprite("Health Background", root, new Vector3(0, 0.76f, 0), new Vector2(0.55f, 0.06f), Color.black, 5);
-            result.HealthFill = MakeSprite("Health", root, new Vector3(0, 0.76f, 0), new Vector2(0.55f, 0.04f), Color.green, 6);
+            result.HealthBack = MakeSprite("Health Background", root, new Vector3(0, QuarterView ? 1.6f : 0.76f, 0), new Vector2(0.55f, 0.06f), Color.black, 5);
+            result.HealthFill = MakeSprite("Health", root, new Vector3(0, QuarterView ? 1.6f : 0.76f, 0), new Vector2(0.55f, 0.04f), Color.green, 6);
             result.TargetMarker = MakeSprite("Current Target", root, new Vector3(0, -0.13f, 0), new Vector2(0.38f, 0.04f), Color.yellow, 4);
             result.Feedback = feedback.CreateActor(root);
             result.WindupRenderer = MakeSprite("Attack preparation", root, new Vector3(0, 0.3f, 0), new Vector2(0.3f, 0.04f), Color.yellow, 3);
             result.Windup = result.WindupRenderer.transform;
             result.Blade = MakeSprite("Diagonal Slash", root, Vector3.zero, new Vector2(0.85f, 0.07f), Color.yellow, 3);
             result.Slash = result.Blade.transform;
+            if (quarterStage != null)
+            {
+                result.Group = root.gameObject.AddComponent<SortingGroup>();
+                result.QuarterActor = quarterStage.CreateActor(root, color, bossMode && label != "Hero", label.Contains("Fast"));
+            }
             return result;
         }
         private void Update()
@@ -206,8 +243,8 @@ namespace EnhancementTower.Presentation
             if (chargeWarning.enabled)
             {
                 Point a = simulation.ChargeOrigin, b = simulation.ChargeEnd, d = b - a;
-                chargeWarning.transform.localPosition = new Vector3((a.X + b.X) * 0.5f, (a.Y + b.Y) * 0.5f, 0);
-                chargeWarning.transform.localRotation = Quaternion.Euler(0, 0, Mathf.Atan2(d.Y, d.X) * Mathf.Rad2Deg);
+                chargeWarning.transform.localPosition = QuarterView ? QuarterViewStage.Ground((a + b) * .5f, .04f) : new Vector3((a.X + b.X) * 0.5f, (a.Y + b.Y) * 0.5f, 0);
+                chargeWarning.transform.localRotation = QuarterView ? Quaternion.LookRotation(Vector3.down, new Vector3(-d.Y, 0, d.X)) : Quaternion.Euler(0, 0, Mathf.Atan2(d.Y, d.X) * Mathf.Rad2Deg);
                 chargeWarning.transform.localScale = new Vector3(d.Length, CombatSimulation.FootRadius * 4, 1);
             }
             sweepWarning.enabled = bossMode && simulation.Hero.Alive && simulation.Monster.Alive && simulation.BossPhase == ChargePhase.Sweep;
@@ -215,22 +252,24 @@ namespace EnhancementTower.Presentation
             {
                 Fighter boss = simulation.ChargeBoss;
                 float heading = Mathf.Atan2(boss.AttackAim.Y, boss.AttackAim.X);
-                sweepWarning.transform.localPosition = new Vector3(boss.Position.X, boss.Position.Y, 0);
-                sweepWarning.SetPosition(0, Vector3.zero);
+                sweepWarning.useWorldSpace = QuarterView;
+                sweepWarning.transform.localPosition = QuarterView ? Vector3.zero : new Vector3(boss.Position.X, boss.Position.Y, 0);
+                sweepWarning.SetPosition(0, QuarterView ? QuarterViewStage.Ground(boss.Position, .045f) : Vector3.zero);
                 for (int i = 0; i < 20; i++)
                 {
                     float angle = heading + Mathf.Deg2Rad * Mathf.Lerp(-CombatSimulation.BossSweepArc * 0.5f, CombatSimulation.BossSweepArc * 0.5f, i / 19f);
-                    sweepWarning.SetPosition(i + 1, new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0) * simulation.BossSweepRange);
+                    Point offset = new Point(Mathf.Cos(angle), Mathf.Sin(angle)) * simulation.BossSweepRange;
+                    sweepWarning.SetPosition(i + 1, QuarterView ? QuarterViewStage.Ground(boss.Position + offset, .045f) : new Vector3(offset.X, offset.Y, 0));
                 }
-                sweepWarning.SetPosition(21, Vector3.zero);
+                sweepWarning.SetPosition(21, QuarterView ? QuarterViewStage.Ground(boss.Position, .045f) : Vector3.zero);
             }
-            viewCamera.orthographicSize = Mathf.Max(4.7f, 2.65f / viewCamera.aspect);
+            viewCamera.orthographicSize = Mathf.Max(QuarterView ? 3.9f : 4.7f, (QuarterView ? 3.15f : 2.65f) / viewCamera.aspect);
             feedback.Effects = showHitEffects; feedback.Numbers = showDamageNumbers;
             feedback.Sound = playCombatSounds; feedback.Volume = combatVolume;
             feedback.BeginFrame(simulation.Hero);
             feedback.UpdateActor(heroView.Feedback, simulation.Hero, true, Time.unscaledDeltaTime);
             Draw(heroView, simulation.Hero, false);
-            if (simulation.GuardActive) heroView.Body.color = new Color(0.4f, 1, 0.85f);
+            if (!QuarterView && simulation.GuardActive) heroView.Body.color = new Color(0.4f, 1, 0.85f);
             DrawAttackArea();
             for (int i = 0; i < simulation.Monsters.Count; i++)
             {
@@ -251,62 +290,79 @@ namespace EnhancementTower.Presentation
             Color color = PrototypeCombatFeedback.AttackColor(step.Kind); color.a = 0.35f;
             attackArea.startColor = attackArea.endColor = color;
             attackArea.sortingOrder = 101 - Mathf.RoundToInt(actor.Position.Y * 20);
-            attackArea.SetPosition(0, Vector3.zero);
+            attackArea.useWorldSpace = QuarterView;
+            attackArea.SetPosition(0, QuarterView ? QuarterViewStage.Ground(actor.Position, .05f) : Vector3.zero);
             for (int i = 0; i <= 16; i++)
             {
                 float direction = angle - half + 2 * half * i / 16;
-                attackArea.SetPosition(i + 1, new Vector3(Mathf.Cos(direction) * range, Mathf.Sin(direction) * range, 0));
+                Point offset = new Point(Mathf.Cos(direction) * range, Mathf.Sin(direction) * range);
+                attackArea.SetPosition(i + 1, QuarterView ? QuarterViewStage.Ground(actor.Position + offset, .05f) : new Vector3(offset.X, offset.Y, 0));
             }
-            attackArea.SetPosition(18, Vector3.zero);
+            attackArea.SetPosition(18, QuarterView ? QuarterViewStage.Ground(actor.Position, .05f) : Vector3.zero);
         }
-        private static void Draw(ActorView view, Fighter fighter, bool targeted)
+        private void Draw(ActorView view, Fighter fighter, bool targeted)
         {
-            view.Root.localPosition = new Vector3(fighter.Position.X, fighter.Position.Y, 0);
+            view.Root.localPosition = QuarterView ? QuarterViewStage.Ground(fighter.Position) : new Vector3(fighter.Position.X, fighter.Position.Y, 0);
+            view.Root.localRotation = QuarterView ? quarterStage.Rotation : Quaternion.identity;
+            if (view.Group != null)
+            {
+                view.Group.enabled = QuarterView;
+                view.Group.sortingOrder = 10000 - Mathf.RoundToInt(fighter.Position.Y * 32) * 128 + 127 - view.StableOrder;
+                view.QuarterActor.Root.gameObject.SetActive(QuarterView);
+                if (QuarterView) view.QuarterActor.Draw(fighter, fighter == simulation.Hero && simulation.GuardActive);
+            }
+            view.Body.enabled = !QuarterView; view.Foot.enabled = !QuarterView;
             int depth = 100 - Mathf.RoundToInt(fighter.Position.Y * 20);
             view.Body.sortingOrder = depth;
             var aim = new Vector2(fighter.Aim.X, fighter.Aim.Y);
             Vector2 cardinal = Mathf.Abs(aim.x) > Mathf.Abs(aim.y) ? new Vector2(Mathf.Sign(aim.x), 0) : new Vector2(0, Mathf.Sign(aim.y));
             view.Facing.localPosition = (Vector3)(cardinal * 0.25f) + new Vector3(0, 0.3f, 0);
             view.Direction.sortingOrder = depth + 1;
-            view.Direction.enabled = fighter.Alive;
+            view.Direction.enabled = fighter.Alive && !QuarterView;
             view.TargetMarker.enabled = targeted && fighter.Alive;
             view.TargetMarker.sortingOrder = depth + 1;
             view.HealthBack.enabled = view.HealthFill.enabled = fighter.Alive;
             view.HealthBack.sortingOrder = depth + 3; view.HealthFill.sortingOrder = depth + 4;
+            float barHeight = QuarterView ? view.QuarterActor.Height + .12f : .76f;
+            view.HealthBack.transform.localPosition = new Vector3(0, barHeight, 0);
             float health = (float)fighter.Health / fighter.MaxHealth;
             view.HealthFill.transform.localScale = new Vector3(0.55f * health, 0.04f, 1);
-            view.HealthFill.transform.localPosition = new Vector3(-0.275f * (1 - health), 0.76f, 0);
+            view.HealthFill.transform.localPosition = new Vector3(-0.275f * (1 - health), barHeight, 0);
             view.Body.color = fighter.HitFlash > 0 ? (fighter.LastHitKind == AttackKind.Thrust ? new Color(0.6f, 1, 1) : Color.white) : fighter.Alive ? view.Color : Color.gray;
             Vector2 recoil = fighter.Alive ? new Vector2(fighter.HitDirection.X, fighter.HitDirection.Y) * fighter.HitFlash * 0.5f : Vector2.zero;
             view.Body.transform.localPosition = new Vector3(recoil.x, 0.3f + recoil.y, 0);
             view.Body.transform.localScale = fighter.Alive ? new Vector3(view.BodySize.x, view.BodySize.y, 1) : new Vector3(0.5f, 0.15f, 1);
             view.Blade.enabled = fighter.Alive && fighter.SlashTime > 0;
-            Vector2 attack = new Vector2(fighter.AttackAim.X, fighter.AttackAim.Y);
+            Vector2 attack = DisplayVector(fighter.AttackAim);
             AttackStep step = fighter.CurrentAttack;
             float duration = Mathf.Max(0.01f, step.Active);
             float progress = Mathf.Clamp01(1 - fighter.SlashTime / duration);
-            float angle = Mathf.Atan2(attack.y, attack.x) * Mathf.Rad2Deg;
             bool thrust = step.Kind == AttackKind.Thrust;
             bool preparing = fighter.Alive && fighter.State == CombatState.Attack && fighter.PhaseTime < step.Windup;
             view.WindupRenderer.enabled = preparing;
             float preparation = step.Windup > 0 ? Mathf.Clamp01(fighter.PhaseTime / step.Windup) : 0;
-            float windupAngle = thrust ? angle : angle + (step.Kind == AttackKind.ReverseSlash ? 65 : -55);
+            float groundAngle = Mathf.Atan2(fighter.AttackAim.Y, fighter.AttackAim.X) * Mathf.Rad2Deg;
+            Vector2 ProjectHeading(float degrees) => DisplayVector(new Point(Mathf.Cos(degrees * Mathf.Deg2Rad), Mathf.Sin(degrees * Mathf.Deg2Rad)));
+            Vector2 preparationDirection = ProjectHeading(groundAngle + (thrust ? 0 : step.Kind == AttackKind.ReverseSlash ? 65 : -55));
+            float windupAngle = Mathf.Atan2(preparationDirection.y, preparationDirection.x) * Mathf.Rad2Deg;
             view.Windup.localRotation = Quaternion.Euler(0, 0, windupAngle);
-            view.Windup.localPosition = (Vector3)(attack * Mathf.Lerp(0.15f, 0.3f, preparation)) + new Vector3(0, 0.3f, 0);
+            view.Windup.localPosition = (Vector3)(attack * Mathf.Lerp(0.15f, 0.3f, preparation)) + new Vector3(0, QuarterView ? .65f : .3f, 0);
             view.Windup.localScale = new Vector3(Mathf.Lerp(0.15f, step.Kind == AttackKind.Breakthrough ? 0.65f : 0.35f, preparation), step.Kind == AttackKind.Breakthrough ? 0.1f : 0.045f, 1);
             Color prepareColor = PrototypeCombatFeedback.AttackColor(step.Kind);
             view.WindupRenderer.color = new Color(prepareColor.r, prepareColor.g, prepareColor.b, Mathf.Lerp(0.2f, 0.85f, preparation));
             view.WindupRenderer.sortingOrder = depth + 2;
             float sweep = step.Kind == AttackKind.ReverseSlash ? 65 - progress * 130 : -55 + progress * 110;
-            view.Slash.localPosition = (Vector3)(attack * (thrust ? 0.35f + Mathf.Sin(progress * Mathf.PI) * 0.4f : 0.5f)) + new Vector3(0, 0.3f, 0);
-            view.Slash.localRotation = Quaternion.Euler(0, 0, angle + (thrust ? 0 : sweep));
-            view.Slash.localScale = new Vector3(thrust ? 0.75f : 0.85f, thrust ? 0.11f : 0.07f, 1);
+            view.Slash.localPosition = (Vector3)(attack * (thrust ? 0.35f + Mathf.Sin(progress * Mathf.PI) * 0.4f : 0.5f)) + new Vector3(0, QuarterView ? .65f : .3f, 0);
+            Vector2 bladeDirection = ProjectHeading(groundAngle + (thrust ? 0 : sweep));
+            view.Slash.localRotation = Quaternion.Euler(0, 0, Mathf.Atan2(bladeDirection.y, bladeDirection.x) * Mathf.Rad2Deg);
+            view.Slash.localScale = new Vector3((thrust ? .75f : .85f) * bladeDirection.magnitude, thrust ? .11f : .07f, 1);
             view.Blade.color = step.Kind == AttackKind.Breakthrough ? new Color(1, 0.35f, 0.15f) : thrust ? new Color(0.5f, 1, 1) : step.Kind == AttackKind.ReverseSlash ? new Color(1, 0.6f, 0.2f) : Color.yellow;
             view.Blade.sortingOrder = depth + 2;
         }
         private void OnGUI()
         {
             if (simulation == null) return;
+            if (enableViewComparison) { DrawComparisonHUD(); return; }
             feedback.DrawNumber(heroView.Feedback, viewCamera);
             for (int i = 0; i < simulation.Monsters.Count; i++) feedback.DrawNumber(monsterViews[i].Feedback, viewCamera);
             showHitEffects = GUI.Toggle(new Rect(12, 430, 110, 30), showHitEffects, "Hit sparks");
@@ -362,6 +418,38 @@ namespace EnhancementTower.Presentation
             bool reposition = GUI.Toggle(new Rect(12, 176, 260, 30), enableReposition, "Pressure reposition");
             if (reposition != enableReposition) { enableReposition = reposition; Restart(); }
         }
-        private void OnDestroy() { feedback?.Dispose(); if (square != null) Destroy(square); if (texture != null) Destroy(texture); }
+        private void DrawComparisonHUD()
+        {
+            feedback.DrawNumber(heroView.Feedback, viewCamera);
+            for (int i = 0; i < simulation.Monsters.Count; i++) feedback.DrawNumber(monsterViews[i].Feedback, viewCamera);
+            Rect safe = Screen.safeArea;
+            float scale = Mathf.Max(.5f, Mathf.Min(safe.width / 380, safe.height / 640));
+            Matrix4x4 previous = GUI.matrix;
+            GUI.matrix = Matrix4x4.TRS(new Vector3(safe.x, Screen.height - safe.yMax, 0), Quaternion.identity, Vector3.one * scale);
+            float width = safe.width / scale, height = safe.height / scale;
+            GUI.Box(new Rect(8, 8, width - 16, 112), "");
+            GUI.Label(new Rect(16, 12, width - 32, 24), $"VIEW STUDY | {(QuarterView ? "2D sprites + 3D" : "Original 2D")}");
+            GUI.Label(new Rect(16, 36, width - 32, 24), $"Hero {simulation.Hero.Health}/{heroHealth} | Foes {simulation.LivingMonsters}");
+            GUI.Label(new Rect(16, 60, width - 32, 24), stage != null ? $"{stage.Result} | {stage.Kills}/{stage.Settings.Total} | {stage.SecondsRemaining:F1}s" : bossMode ? $"Boss {simulation.BossPhase} | Guarded {simulation.GuardedHits}" : $"Seed {simulation.Seed} | {simulation.Hero.State}");
+            if (GUI.Button(new Rect(16, 88, 166, 26), "Switch view (same run)")) { quarterView = !quarterView; ConfigureView(); }
+            if (GUI.Button(new Rect(width - 100, 88, 84, 26), "Restart")) Restart();
+            if (!simulation.Hero.Alive || simulation.LivingMonsters == 0 && stage == null)
+                GUI.Label(new Rect(16, 130, width - 32, 28), simulation.Hero.Alive ? "CLEAR" : "DEFEAT");
+            if (GUI.Button(new Rect(12, height - 160, 76, 32), "1 foe")) { bossMode = stageMode = trapTest = wallTest = false; monsterCount = 1; Restart(); }
+            if (GUI.Button(new Rect(92, height - 160, 76, 32), "5 foes")) { bossMode = stageMode = trapTest = wallTest = false; monsterCount = 5; Restart(); }
+            if (GUI.Button(new Rect(172, height - 160, 76, 32), "8 foes")) { bossMode = stageMode = trapTest = wallTest = false; monsterCount = 8; Restart(); }
+            if (GUI.Button(new Rect(252, height - 160, 76, 32), "12 foes")) { bossMode = stageMode = trapTest = wallTest = false; monsterCount = 12; Restart(); }
+            if (GUI.Button(new Rect(128, height - 120, 112, 32), "Stage run")) { bossMode = trapTest = wallTest = false; stageMode = true; Restart(); }
+            if (GUI.Button(new Rect(12, height - 120, 112, 32), "Charge boss")) { bossMode = true; stageMode = trapTest = wallTest = false; Restart(); }
+            showAttackArea = GUI.Toggle(new Rect(248, height - 118, 100, 28), showAttackArea, "Attack area");
+            if (bossMode && simulation.Hero.Alive && simulation.Monster.Alive)
+            {
+                GUI.enabled = simulation.GuardSecondsRemaining <= 0;
+                if (GUI.Button(new Rect(12, height - 76, width - 24, 60), simulation.GuardActive ? "FOCUS GUARD ACTIVE" : GUI.enabled ? "FOCUS GUARD" : $"GUARD {simulation.GuardSecondsRemaining:F1}s")) simulation.RequestBossGuard();
+                GUI.enabled = true;
+            }
+            GUI.matrix = previous;
+        }
+        private void OnDestroy() { quarterStage?.Dispose(); feedback?.Dispose(); if (square != null) Destroy(square); if (texture != null) Destroy(texture); }
     }
 }

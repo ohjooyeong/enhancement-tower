@@ -32,3 +32,7 @@ Unity 6000.6.4f1에서 `Assets/Scenes/CombatPrototype.unity`를 열고 Play합�
 
 
 **Stage run**은 처음 5마리로 시작해 화면 상단에서 순차 합류하는 한 판입니다. 기본 총50/생존상한8/합류1.2초/제한90초는 `Assets/Data/PrototypeStage.asset`에서 조절합니다. Kills·Pending·Time과 CLEAR/DEFEAT/TIME UP을 확인하고 Restart로 재시작합니다. 5/8/12 버튼은 기존 군집 비교로 돌아갑니다. 빠른 적은 낮은 체력 대신 약 .48초 준비+회복으로 근접 압박을 주도록 조정했습니다.
+
+## View 비교 실행
+
+`Assets/Scenes/CombatViewComparison.unity`를 열고 Play하면 임시4등신 픽셀 캐릭터+3D환경을 볼 수 있습니다. **Switch view (same run)**으로 기존2D 표시와 같은 전투를 비교하고, 하단1/5/8/12·Stage run·Charge boss/FOCUS GUARD를 사용합니다. 기존 CombatPrototype 씬과 전투 규칙은 보존했습니다. 최종 아트/렌더러 선택 전 비교용이며 실행·검증 범위는 [26](docs/26_COMBAT_PROTOTYPE.md)의 View 비교 항목을 참조하세요.

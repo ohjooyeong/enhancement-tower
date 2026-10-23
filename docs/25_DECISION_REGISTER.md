@@ -72,3 +72,9 @@
 - Keep the previous auto-dodge available only through an explicit simulation comparison option (`manualDefense: false`), not the default screen behavior. Restart creates fresh input/timer state.
 - World explanation extends the existing synchronization in01: trained instinct handles ordinary combat; a guardian's deliberate major attack requires conscious focus to reinforce that response. This is an extension, not loss of synchronization or tower mind control. A separately named storybook was not located; reconcile with it when its source is supplied.
 - Future auto-climb must pause at an uncleared boss for deliberate entry, rather than silently continuing unattended retries. Boss entry UX, repeated clears/offline handling and rewards remain unimplemented and require their own slice.
+
+## 2026-10-23 USER-APPROVED View comparison implementation
+- User authorized development of the minimal comparison after the28 review. Implement the 2D pixel-placeholder character + simple3D environment candidate alongside the original2D View, keeping the same simulation instance during view switches.
+- This authorizes a comparison slice, not final art, a permanent renderer choice or full project migration. Fixed40-degree Orthographic camera, code-drawn24x48/40PPU silhouettes and simple walls/pillars are tuning assumptions.
+- A Universal Renderer is appended as a camera-selectable option in the existing RP asset; default Renderer2D/quality selections remain unchanged. The comparison scene selects it only for the hybrid View. Authored material references retain the required shaders for builds.
+- Pure combat code, definitions, existing scene settings and manual Focus Guard are preserved. The new environment has no colliders and no actual height gameplay. Rendering/Editor validation status and user steps are recorded in26.

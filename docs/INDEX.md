@@ -46,3 +46,7 @@
 > 약 4등신 캐릭터와 입체감 있는 쿼터뷰 환경으로 구성한 2.5D풍 픽셀 아트 RPG. 레인 없는 전방 중심 자유 자동전투를 사용하며 카메라 방향은 고정한다.
 
 렌더링 기술은 미확정이다. [28_VISUAL_DIRECTION_AND_VIEW_REVIEW.md](28_VISUAL_DIRECTION_AND_VIEW_REVIEW.md)에 문서 충돌, 현재 Assets/View 구조, 기술 비교와 승인 후 검증 항목을 정리했다. [27_FIRST_ASCENT_STORYBOOK.md](27_FIRST_ASCENT_STORYBOOK.md)는 저장소에 추가된 초반 서사/UX **제안**이며, 등장 동기·NPC·장면 전체를 승인된 구현으로 간주하지 않는다. 그 문서의 이전 `2D 수제 도트` 표현도 최신25의 시각적 목표를 따른다.
+
+## View 비교 구현
+
+사용자 승인 후 `CombatViewComparison` 비교 씬에서 기존2D/임시4등신+3D환경을 전환하는 최소 구현을 진행했다. 실행 방법과 최신 검증 상태는 `26_COMBAT_PROTOTYPE.md`의 View 비교 항목을 따른다. 최종 아트/렌더러 확정은 아니다.

@@ -114,3 +114,7 @@ View 좌표 변환 → Actor 표시 / 바닥 경고 / 피드백 위치 / 고정 
 - 프로젝트 코드: `Assets/Scripts/Presentation/CombatPrototype.cs`, `PrototypeCombatFeedback.cs`, `Assets/Scripts/Combat/CombatSimulation.cs`.
 - Unity의 정렬 기준은 레이어/Order/Render Queue/거리 등에 영향을 받으므로 발 기준과 부품 묶음을 함께 검토한다: [Unity6000.6 — 2D rendering order](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/sprite/sort-sprites/sort-sprites), [Unity6000.6 — Sorting Group component reference](https://docs.unity.com/en-us/engine/6000.6/manual/unity2d/sprite/sort-sprites/sorting-group-reference).
 - B/A 권고와 좌표 변환 구조는 프로젝트 소스에 근거한 설계 제안이다. 공식 문서가 이 게임의 최종 렌더러나 성능을 보장하는 것은 아니다. 패키지별 기능은 고정된6000.6.4f1 환경에서 검증한다.
+
+## 2026-10-23 후속 개발 승인
+
+사용자가 최소 비교 구현을 승인했다. B후보의 비교 View/씬을 개발하며 원래2D 표시와 같은 시뮬레이션을 유지한 채 전환한다. 위의 `승인 후` 항목은 최초 검토 당시 기록이다. 영구 렌더링 기술 선택과 최종 아트는 여전히 미정이다. 구현/실행·검증은26 후속 기록을 따른다.

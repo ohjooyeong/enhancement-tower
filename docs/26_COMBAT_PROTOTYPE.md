@@ -189,3 +189,30 @@
 - 검증: Unity6000.6.4f1 내장 Roslyn + 현재 Bee rsp로 Combat/Tests/Assembly-CSharp를 각각 임시 출력에 컴파일하여 exit0 확인. 분리된 Combat/Tests DLL을 .NET8 reflection 실행기로 실행해 **87/87 통과**. 기존84개 회귀와 신규 입력 큐/지속/쿨다운, 실제 돌진 피해 감소/최소 피해/발 충돌, 일반전·사망 후 입력 거부,30vs120Hz 동일 틱 입력 재현을 포함한다. Unity Test Runner/Editor 재컴파일 완료/Play Mode/실제 터치·모바일 성능·Windows는 미검증이다. .NET 결과를 Unity 테스트 통과로 간주하지 않는다.
 - 변경 파일: CombatSimulation.cs, CombatPrototype.cs, CombatSimulationTests.cs, AGENTS.md, INDEX 및00/01/04/05/07/23/25/26 문서. 기존 씬/에셋/메타는 변경하지 않았다.
 - 다음 최소 단계: 실제 화면에서 무입력/적시 방어/이른 방어를 비교해 참여감과 압박을 판단하고 방어 시간·감소율을 조정한다. 보스 입장 대기/시간제한/종료 흐름은 이후 별도 작업이다.
+
+## 4등신 + 3D 환경 View 비교 (2026-10-23 개발 승인 후)
+
+- `Assets/Scenes/CombatViewComparison.unity`를 추가했다. **기존 CombatPrototype 씬은 수정하지 않았다.** 새 씬은 생성 시 기존 씬의 HP/정의/이동/보스 Inspector 값을 복사하며 고정 시드 비교를 기본으로 한다. 이후 원본 씬을 편집해도 비교 씬에 자동 동기화되는 것은 아니다.
+- 새 `QuarterViewStage.cs`는 표시 전용이다. 논리 Point(X,Y)를 지면(X,0,Y)로 옮기고, 고정40도 Orthographic 카메라·임시4등신 스프라이트·바닥/벽/기둥/후방 단차 외형을 만든다. 인물은24x48/40PPU의 코드 생성 실루엣이며4방향·간단한 걷기 프레임으로 비교한다. 최종 수제 도트/완성 애니메이션/라이팅은 아니다. 환경에 Collider를 추가하지 않으며 실제 고저차 전투도 없다.
+- `CombatPrototype.cs`는 기존 전투 진행/구성을 유지하면서 비교 View를 연결한다. 배우별 SortingGroup으로 몸/무기/피드백을 묶고 발 깊이와 생성 순서로 정렬한다. 공격/휩쓸기/돌진의 바닥 안내는 기존 논리 기하를 투영한다. 검기 방향도 지면 방향에서 표시 방향으로 변환하며 VFX가 판정/대상 수를 바꾸지 않는다. `PrototypeCombatFeedback.cs`는 숫자 위치에 같은 좌표 변환을 사용한다.
+- `Switch view (same run)`은 시드/HP/콤보/위치/시간/방어 입력을 초기화하지 않는다. 보스와 일반전이 같은 카메라 구조를 사용하며 **수동 FOCUS GUARD는 유지, 기본 돌진 자동 회피는 해제 상태**다. View 전환 시 카메라 투영/각도가 바뀌는 것은 비교 도구이며 실제 플레이에서 방향을 계속 회전시키는 기능이 아니다.
+- `ViewComparisonRenderer.asset`와 참조용 Sprite/Stone 재질을 추가했다. `UniversalRP.asset`에는 두 번째 렌더러 참조1개만 추가했고 기본 Renderer2D index0/품질 설정은 보존했다. 비교 카메라가 새 View에서만 index1을 선택하며 기존2D로 바꾸면 기본 렌더러로 돌아간다. 재질은 에셋 참조를 통해 셰이더를 포함하고 실행 중 복제본만 수정한다. 최종 렌더러 채택은 여전히 미정이다.
+
+### Unity에서 할 일
+
+1. Unity6000.6.4f1에서 컴파일/임포트가 끝나면 `Assets/Scenes/CombatViewComparison`을 열고 Play한다. 별도 에셋 제작이나 Inspector 할당은 필요 없다.
+2. Game View를9:16으로 맞추고 **1 foe → 5 foes → 8 foes → 12 foes**를 비교한다. 약4등신 크기/발 접지/앞뒤 방향, 기둥의 면과 바닥 깊이, 밀집·넉백/겹침 순서를 본다.
+3. **Switch view (same run)**으로 기존 도형 표시와 비교한다. 전투가 새로 시작되지 않아야 한다. 같은 초기 전개를 다시 보려면 Restart를 쓴다.
+4. **Charge boss → FOCUS GUARD**로 큰 공격 타이밍/청록 반응/HP 감소/쿨다운을 본다. 무입력/이른 방어/적시 방어를 비교한다. 자동 측면 회피나 방어 관통/무적이 생기면 안 된다. **Attack area**로 지면 판정 안내와 사선 검기를 비교한다.
+5. **Stage run**에서 실제 순차 합류/처치/시간/결과를 확인한다. 비교용 HUD는 안전영역 안에서 상단 상태·하단 모드/방어 버튼으로 배치했다.9:19.5와 실제 터치에서도 읽히고 누를 수 있는지 확인한다.
+6. 새 씬이 없을 때만 `Enhancement Tower → Create View Comparison Scene`을 사용한다. 기존 비교 씬이 있으면 열기만 하며 덮어쓰지 않는다. 메뉴는 원본 씬 설정을 복사해 별도 경로에 저장하고 비교 씬을 연다. 기존 `Create Combat Prototype Scene` 메뉴는 원본을 재작성하므로 이번 확인에 사용하지 않는다.
+
+### 검증과 남은 한계
+
+- 임시 Unity6000.6.4f1 프로젝트에서 실제 임포트/메타·렌더러·재질·씬 생성과 컴파일을 확인했다. 생성된 씬/설정/메타를 저장소로 가져왔다. 최종 Presentation/Editor 소스는 동일 에디터의 Roslyn/Bee 참조로 컴파일 exit0을 확인했다.
+- **Unity Test Runner EditMode87/87 통과**: 이번에는 별도.NET 실행이 아니라 Unity가 생성한 XML의 Passed87/Failed0을 확인했다. 전투 계산/보스/집중 방어/StageEncounter 회귀를 포함하며, 이 테스트들이 View 화면 품질을 검증한다는 뜻은 아니다.
+- 별도 임시 Editor 검증 실행기로 Play 상태의 비활성 컴포넌트를 한 번 초기화하고 제어된 업데이트를 실행했다.1마리/보스/12마리 각각600틱에서 같은 시드/설정/방어 입력의 순수 전투 모델과 영웅 HP/위치/틱·몬스터 HP가 일치했고, 같은 런의2D↔새 View 전환도 확인했다. 보스에서 수동 방어 요청2회를 비교했다. 검증기의 초기화 중복/프레임 대기 문제는 수정한 후 재실행했다.
+- Metal 렌더 요청으로540x960(9:16) 카메라 캡처를 생성해 캐릭터/환경/보스/지면 판정 안내가 렌더되는 것을 확인했다. 카메라 캡처에는 IMGUI HUD가 포함되지 않으므로 실제 HUD/터치·사운드 청취·자연스러운 조작 체감은 사용자의 Play 확인이 남는다. 배치 Editor의 Search 인덱서 내부 예외는 게임 코드와 분리해서 기록했다.
+- 모바일 실기기 성능/Android 빌드·Windows 실행·장시간 플레이·모든 방향의 기둥 가림/동률 정렬은 미검증이다. 실제 캐릭터 아트의 방향 수/픽셀 밀도/규모와 최종 렌더링 기술은 이 비교를 보고 결정한다. 게임 전체 렌더러 전환이나 전투 코드 재작성은 수행하지 않았다.
+- 추가: QuarterViewStage.cs와 Unity 생성 meta, CombatViewComparison 씬/meta, ViewComparisonRenderer와2개 재질/meta. 수정: CombatPrototype.cs, PrototypeCombatFeedback.cs, CombatPrototypeSceneBuilder.cs, UniversalRP.asset 및 README/INDEX/25/26/28. 순수 Combat 코드/테스트/기존 씬/정적 전투 데이터, 사용자 스토리북은 변경하지 않았다.
+- 다음 최소 단계: 사용자가 실제 화면에서 캐릭터 크기·공간 깊이·방어 가독성을 확인한 뒤, 한 가지 문제(예: 캐릭터 크기 또는 기둥 가림)를 골라 조정한다. 최종 아트나 전체 렌더러 전환을 바로 확대하지 않는다.
