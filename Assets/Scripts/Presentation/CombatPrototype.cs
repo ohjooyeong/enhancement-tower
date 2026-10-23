@@ -40,6 +40,7 @@ namespace EnhancementTower.Presentation
         private int seedCounter;
         [SerializeField] private bool showHitEffects = true, showDamageNumbers = true, playCombatSounds = true;
         [SerializeField] private bool showAttackArea;
+        [SerializeField] private bool showSwordMotion = true;
         private LineRenderer attackArea;
         [SerializeField, Range(0, 1)] private float combatVolume = 0.18f;
         private PrototypeCombatFeedback feedback;
@@ -228,7 +229,7 @@ namespace EnhancementTower.Presentation
             if (quarterStage != null)
             {
                 result.Group = root.gameObject.AddComponent<SortingGroup>();
-                result.QuarterActor = quarterStage.CreateActor(root, color, bossMode && label != "Hero", label.Contains("Fast"));
+                result.QuarterActor = quarterStage.CreateActor(root, color, bossMode && label != "Hero", label.Contains("Fast"), label == "Hero");
             }
             return result;
         }
@@ -309,7 +310,7 @@ namespace EnhancementTower.Presentation
                 view.Group.enabled = QuarterView;
                 view.Group.sortingOrder = 10000 - Mathf.RoundToInt(fighter.Position.Y * 32) * 128 + 127 - view.StableOrder;
                 view.QuarterActor.Root.gameObject.SetActive(QuarterView);
-                if (QuarterView) view.QuarterActor.Draw(fighter, fighter == simulation.Hero && simulation.GuardActive);
+                if (QuarterView) view.QuarterActor.Draw(fighter, fighter == simulation.Hero && simulation.GuardActive, showSwordMotion, showHitEffects);
             }
             view.Body.enabled = !QuarterView; view.Foot.enabled = !QuarterView;
             int depth = 100 - Mathf.RoundToInt(fighter.Position.Y * 20);
@@ -332,14 +333,15 @@ namespace EnhancementTower.Presentation
             Vector2 recoil = fighter.Alive ? new Vector2(fighter.HitDirection.X, fighter.HitDirection.Y) * fighter.HitFlash * 0.5f : Vector2.zero;
             view.Body.transform.localPosition = new Vector3(recoil.x, 0.3f + recoil.y, 0);
             view.Body.transform.localScale = fighter.Alive ? new Vector3(view.BodySize.x, view.BodySize.y, 1) : new Vector3(0.5f, 0.15f, 1);
-            view.Blade.enabled = fighter.Alive && fighter.SlashTime > 0;
+            bool heldSword = QuarterView && fighter == simulation.Hero && showSwordMotion;
+            view.Blade.enabled = !heldSword && fighter.Alive && fighter.SlashTime > 0;
             Vector2 attack = DisplayVector(fighter.AttackAim);
             AttackStep step = fighter.CurrentAttack;
             float duration = Mathf.Max(0.01f, step.Active);
             float progress = Mathf.Clamp01(1 - fighter.SlashTime / duration);
             bool thrust = step.Kind == AttackKind.Thrust;
             bool preparing = fighter.Alive && fighter.State == CombatState.Attack && fighter.PhaseTime < step.Windup;
-            view.WindupRenderer.enabled = preparing;
+            view.WindupRenderer.enabled = preparing && !heldSword;
             float preparation = step.Windup > 0 ? Mathf.Clamp01(fighter.PhaseTime / step.Windup) : 0;
             float groundAngle = Mathf.Atan2(fighter.AttackAim.Y, fighter.AttackAim.X) * Mathf.Rad2Deg;
             Vector2 ProjectHeading(float degrees) => DisplayVector(new Point(Mathf.Cos(degrees * Mathf.Deg2Rad), Mathf.Sin(degrees * Mathf.Deg2Rad)));
@@ -441,7 +443,8 @@ namespace EnhancementTower.Presentation
             if (GUI.Button(new Rect(252, height - 160, 76, 32), "12 foes")) { bossMode = stageMode = trapTest = wallTest = false; monsterCount = 12; Restart(); }
             if (GUI.Button(new Rect(128, height - 120, 112, 32), "Stage run")) { bossMode = trapTest = wallTest = false; stageMode = true; Restart(); }
             if (GUI.Button(new Rect(12, height - 120, 112, 32), "Charge boss")) { bossMode = true; stageMode = trapTest = wallTest = false; Restart(); }
-            showAttackArea = GUI.Toggle(new Rect(248, height - 118, 100, 28), showAttackArea, "Attack area");
+            showSwordMotion = GUI.Toggle(new Rect(16, height - 198, 150, 28), showSwordMotion, "Sword motion");
+            showAttackArea = GUI.Toggle(new Rect(180, height - 198, 150, 28), showAttackArea, "Attack area");
             if (bossMode && simulation.Hero.Alive && simulation.Monster.Alive)
             {
                 GUI.enabled = simulation.GuardSecondsRemaining <= 0;

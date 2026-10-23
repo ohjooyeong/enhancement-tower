@@ -17,7 +17,7 @@ namespace EnhancementTower.Presentation
         private readonly List<Texture2D> textures = new List<Texture2D>();
         private readonly List<Sprite> sprites = new List<Sprite>();
         private readonly Dictionary<Color, Sprite[]> costumes = new Dictionary<Color, Sprite[]>();
-        private readonly Sprite shadow;
+        private readonly Sprite shadow, sword, solid;
 
         public static Vector3 Ground(Point p, float height = 0) => new Vector3(p.X, height, p.Y);
         public static Vector3 BillboardDelta(Point p) => new Vector3(p.X, Mathf.Sin(Pitch * Mathf.Deg2Rad) * p.Y, 0);
@@ -33,6 +33,16 @@ namespace EnhancementTower.Presentation
             palette.Apply(); textures.Add(palette); stone.SetTexture("_BaseMap", palette);
             box = MakeBox();
             shadow = MakeShadow();
+            solid = MakeSprite("Pose pixel", 1, 1, new[] { Color.white }, new Vector2(.5f, .5f), 1);
+            var blade = new Color[12 * 48];
+            void Paint(int x, int y, int w, int h, Color color)
+            { for (int iy = y; iy < y + h; iy++) for (int ix = x; ix < x + w; ix++) blade[iy * 12 + ix] = color; }
+            Paint(5, 1, 3, 10, new Color(.18f, .12f, .08f));
+            Paint(2, 10, 9, 3, new Color(.75f, .56f, .24f));
+            Paint(4, 13, 5, 29, new Color(.25f, .37f, .45f));
+            Paint(5, 13, 3, 30, new Color(.72f, .85f, .9f));
+            Paint(5, 14, 1, 28, Color.white); Paint(6, 43, 1, 4, new Color(.9f, .97f, 1));
+            sword = MakeSprite("Held longsword placeholder", 12, 48, blade, new Vector2(.5f, 7f / 48), 50);
             for (int x = 0; x < 6; x++)
                 for (int z = 0; z < 10; z++)
                     Box("Floor tile", new Vector3(-2.5f + x, -0.14f, -4 + z), new Vector3(.98f, .25f, .98f),
@@ -77,7 +87,7 @@ namespace EnhancementTower.Presentation
             mesh.SetVertices(vertices); mesh.SetUVs(0, uv); mesh.SetTriangles(triangles, 0); mesh.RecalculateNormals();
             return mesh;
         }
-        public Actor CreateActor(Transform parent, Color color, bool boss, bool fast)
+        public Actor CreateActor(Transform parent, Color color, bool boss, bool fast, bool hero = false)
         {
             if (!costumes.TryGetValue(color, out Sprite[] frames))
             {
@@ -86,7 +96,7 @@ namespace EnhancementTower.Presentation
                     for (int step = 0; step < 2; step++) frames[direction * 2 + step] = MakePerson(color, direction, step);
                 costumes.Add(color, frames);
             }
-            return new Actor(parent, this, frames, boss ? 1.25f : fast ? .82f : 1);
+            return new Actor(parent, this, frames, boss ? 1.25f : fast ? .82f : 1, hero, color);
         }
         private Sprite MakePerson(Color costume, int direction, int step)
         {
@@ -136,31 +146,142 @@ namespace EnhancementTower.Presentation
         {
             public readonly Transform Root;
             public float Height => scale * 1.2f;
-            private readonly SpriteRenderer body, shadowRenderer;
-            private readonly Sprite[] frames;
+            private readonly SpriteRenderer body, shadowRenderer, torso, weapon;
+            private readonly SpriteRenderer[] arms, hands;
+            private readonly Transform visual, upperBody;
+            private readonly LineRenderer trail;
+            private readonly Sprite[] frames, lowerFrames, upperFrames;
             private readonly float scale;
-            public Actor(Transform parent, QuarterViewStage stage, Sprite[] frames, float scale)
+            private readonly bool hero;
+            public Actor(Transform parent, QuarterViewStage stage, Sprite[] frames, float scale, bool hero, Color costume)
             {
-                this.frames = frames; this.scale = scale;
+                this.frames = frames; this.scale = scale; this.hero = hero;
                 Root = new GameObject("Quarter-view actor").transform; Root.SetParent(parent, false);
-                var visual = new GameObject("Billboard visual").transform; visual.SetParent(Root, false); visual.localRotation = Quaternion.identity;
-                var go = new GameObject("Four-head pixel silhouette"); go.transform.SetParent(visual, false);
-                body = go.AddComponent<SpriteRenderer>(); body.sharedMaterial = stage.SpriteMaterial; body.sprite = frames[0];
-                body.transform.localScale = Vector3.one * scale;
-                go = new GameObject("Ground shadow"); go.transform.SetParent(Root, false);
-                go.transform.localPosition = Quaternion.Inverse(stage.Rotation) * (Vector3.up * .025f); go.transform.localRotation = Quaternion.Inverse(stage.Rotation) * Quaternion.Euler(90, 0, 0);
-                go.transform.localScale = new Vector3(.62f, .38f, 1) * scale;
-                shadowRenderer = go.AddComponent<SpriteRenderer>(); shadowRenderer.sharedMaterial = stage.SpriteMaterial; shadowRenderer.sprite = stage.shadow; shadowRenderer.sortingOrder = -10;
+                visual = new GameObject("Billboard visual").transform; visual.SetParent(Root, false);
+                visual.localScale = Vector3.one * scale;
+                SpriteRenderer Part(string name, Transform owner, Sprite sprite, Color color, int order)
+                {
+                    var go = new GameObject(name); go.transform.SetParent(owner, false);
+                    var renderer = go.AddComponent<SpriteRenderer>(); renderer.sharedMaterial = stage.SpriteMaterial;
+                    renderer.sprite = sprite; renderer.color = color; renderer.sortingOrder = order; return renderer;
+                }
+                body = Part("Four-head pixel silhouette", visual, frames[0], Color.white, 0);
+                shadowRenderer = Part("Ground shadow", Root, stage.shadow, Color.white, -10);
+                shadowRenderer.transform.localPosition = Quaternion.Inverse(stage.Rotation) * (Vector3.up * .025f);
+                shadowRenderer.transform.localRotation = Quaternion.Inverse(stage.Rotation) * Quaternion.Euler(90, 0, 0);
+                shadowRenderer.transform.localScale = new Vector3(.62f, .38f, 1) * scale;
+                if (!hero) return;
+                lowerFrames = new Sprite[frames.Length]; upperFrames = new Sprite[frames.Length];
+                for (int i = 0; i < frames.Length; i++)
+                {
+                    // Remove painted arms from the upper layer; the articulated arms now own those pixels.
+                    Texture2D source = frames[i].texture;
+                    var pixels = source.GetPixels();
+                    for (int y = 18; y < 35; y++) for (int x = 0; x < 24; x++)
+                        if (x < 6 || x >= 18) pixels[y * 24 + x] = Color.clear;
+                    var texture = new Texture2D(24, 48, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+                    texture.SetPixels(pixels); texture.Apply(); stage.textures.Add(texture);
+                    lowerFrames[i] = Sprite.Create(texture, new Rect(0, 0, 24, 18), new Vector2(.5f, 0), 40);
+                    upperFrames[i] = Sprite.Create(texture, new Rect(0, 18, 24, 30), new Vector2(.5f, 4f / 30), 40);
+                    stage.sprites.Add(lowerFrames[i]); stage.sprites.Add(upperFrames[i]);
+                }
+                upperBody = new GameObject("Torso pivot").transform; upperBody.SetParent(visual, false);
+                torso = Part("Torso and head", upperBody, upperFrames[0], Color.white, 5);
+                weapon = Part("Held sword", visual, stage.sword, Color.white, 12);
+                arms = new SpriteRenderer[4]; hands = new SpriteRenderer[2];
+                for (int i = 0; i < 4; i++) arms[i] = Part("Arm segment " + i, visual, stage.solid, costume * .8f, 9);
+                for (int i = 0; i < 2; i++) hands[i] = Part("Sword grip hand " + i, visual, stage.solid, new Color(.86f, .69f, .5f), 13);
+                var arc = new GameObject("Sword sweep trail"); arc.transform.SetParent(visual, false);
+                trail = arc.AddComponent<LineRenderer>(); trail.sharedMaterial = stage.SpriteMaterial;
+                trail.useWorldSpace = false; trail.positionCount = 10; trail.startWidth = .02f; trail.endWidth = .075f;
+                trail.startColor = new Color(.65f, .88f, 1, 0); trail.endColor = new Color(.9f, .98f, 1, .65f);
+                trail.sortingOrder = 11; trail.enabled = false;
             }
-            public void Draw(Fighter fighter, bool guard)
+            public void Draw(Fighter fighter, bool guard, bool swordMotion = true, bool effects = true)
             {
                 Point aim = fighter.State == CombatState.Attack ? fighter.AttackAim : fighter.Aim;
                 int direction = Mathf.Abs(aim.X) > Mathf.Abs(aim.Y) ? (aim.X < 0 ? 2 : 3) : aim.Y > 0 ? 1 : 0;
                 int step = fighter.Movement.Length > .05f ? ((int)(fighter.Position.X * 6 + fighter.Position.Y * 6) & 1) : 0;
-                body.sprite = frames[direction * 2 + step];
-                body.color = guard ? new Color(.35f, 1, .8f) : fighter.HitFlash > 0 ? new Color(1, .55f, .5f) : fighter.Alive ? Color.white : Color.gray;
-                body.transform.localScale = new Vector3(scale, fighter.Alive ? scale : scale * .22f, 1);
+                int frame = direction * 2 + step;
+                bool posed = hero && swordMotion;
+                body.sprite = posed ? lowerFrames[frame] : frames[frame];
+                Color tint = guard ? new Color(.35f, 1, .8f) : fighter.HitFlash > 0 ? new Color(1, .55f, .5f) : fighter.Alive ? Color.white : Color.gray;
+                body.color = tint;
+                visual.localScale = new Vector3(scale, fighter.Alive ? scale : scale * .22f, 1);
                 shadowRenderer.enabled = fighter.Alive;
+                if (!hero) return;
+                upperBody.gameObject.SetActive(posed); weapon.enabled = posed && fighter.Alive;
+                for (int i = 0; i < arms.Length; i++) arms[i].enabled = posed && fighter.Alive;
+                for (int i = 0; i < hands.Length; i++) hands[i].enabled = posed && fighter.Alive;
+                trail.enabled = false;
+                if (!posed) return;
+                torso.sprite = upperFrames[frame]; torso.color = tint;
+                DrawSwordPose(fighter, aim, effects);
+            }
+            private void DrawSwordPose(Fighter fighter, Point aim, bool effects)
+            {
+                AttackStep attack = fighter.CurrentAttack;
+                bool attacking = fighter.Alive && fighter.State == CombatState.Attack;
+                bool thrust = attack.Kind == AttackKind.Thrust;
+                float time = fighter.PhaseTime;
+                float prepare = attacking ? Mathf.Clamp01(time / Mathf.Max(.001f, attack.Windup)) : 0;
+                float active = attacking ? Mathf.Clamp01((time - attack.Windup) / Mathf.Max(.001f, attack.Active)) : 0;
+                float recover = attacking ? Mathf.Clamp01((time - attack.Windup - attack.Active) / Mathf.Max(.001f, attack.Recovery)) : 0;
+                bool windup = attacking && time < attack.Windup;
+                bool hitting = attacking && time >= attack.Windup && time < attack.Windup + attack.Active;
+                float sign = attack.Kind == AttackKind.ReverseSlash ? -1 : 1;
+                float idle = -25;
+                float sweep = !attacking ? idle : thrust ? 0 : windup ? Mathf.Lerp(idle, -85 * sign, Smooth(prepare)) : hitting ? Mathf.Lerp(-85 * sign, 85 * sign, Smooth(active)) : Mathf.Lerp(85 * sign, idle, Smooth(recover));
+                float twist = !attacking ? 0 : windup ? -13 * sign * Smooth(prepare) : hitting ? Mathf.Lerp(-13, 14, Smooth(active)) * sign : 14 * sign * (1 - Smooth(recover));
+                float lean = !attacking ? 0 : windup ? -.035f * Smooth(prepare) : .045f * (1 - Smooth(recover));
+                Vector3 forward = BillboardDelta(aim.Normalized);
+                upperBody.localPosition = new Vector3(forward.x * lean, .55f + forward.y * lean, 0);
+                upperBody.localRotation = Quaternion.Euler(0, 0, twist);
+                float heading = Mathf.Atan2(aim.Y, aim.X) * Mathf.Rad2Deg;
+                Vector3 BladeDirection(float offset)
+                {
+                    float angle = (heading + offset) * Mathf.Deg2Rad;
+                    return BillboardDelta(new Point(Mathf.Cos(angle), Mathf.Sin(angle)));
+                }
+                Vector3 blade = BladeDirection(sweep);
+                float reach = thrust && attacking ? windup ? .12f : hitting ? Mathf.Lerp(.15f, .5f, Smooth(active)) : Mathf.Lerp(.5f, .26f, Smooth(recover)) : .27f;
+                Vector3 chest = new Vector3(0, .74f, 0);
+                Vector3 grip = chest + blade * reach + Vector3.up * (windup ? .09f * prepare : 0);
+                weapon.transform.localPosition = grip;
+                weapon.transform.localRotation = Quaternion.Euler(0, 0, Mathf.Atan2(blade.y, blade.x) * Mathf.Rad2Deg - 90);
+                weapon.transform.localScale = new Vector3(1, blade.magnitude, 1);
+                bool behind = blade.y > .2f;
+                weapon.sortingOrder = behind ? 3 : 12;
+                for (int hand = 0; hand < 2; hand++)
+                {
+                    Vector3 shoulder = upperBody.localPosition + upperBody.localRotation * new Vector3(hand == 0 ? -.14f : .14f, .23f, 0);
+                    Vector3 hold = grip - blade.normalized * (.035f + hand * .065f);
+                    Vector3 elbow = (shoulder + hold) * .5f + new Vector3(hand == 0 ? -.035f : .035f, -.06f, 0);
+                    Segment(arms[hand * 2], shoulder, elbow, .075f);
+                    Segment(arms[hand * 2 + 1], elbow, hold, .065f);
+                    arms[hand * 2].sortingOrder = arms[hand * 2 + 1].sortingOrder = behind ? 4 : 10;
+                    hands[hand].transform.localPosition = hold;
+                    hands[hand].transform.localScale = new Vector3(.08f, .09f, 1);
+                    hands[hand].sortingOrder = behind ? 4 : 13;
+                }
+                trail.enabled = effects && hitting && !thrust;
+                if (trail.enabled)
+                {
+                    for (int i = 0; i < trail.positionCount; i++)
+                    {
+                        float previous = Mathf.Lerp(Mathf.Max(0, active - .3f), active, i / 9f);
+                        float angle = Mathf.Lerp(-85 * sign, 85 * sign, Smooth(previous));
+                        trail.SetPosition(i, chest + BladeDirection(angle) * 1.03f);
+                    }
+                }
+            }
+            private static float Smooth(float value) => value * value * (3 - 2 * value);
+            private static void Segment(SpriteRenderer part, Vector3 from, Vector3 to, float width)
+            {
+                Vector3 delta = to - from;
+                part.transform.localPosition = (from + to) * .5f;
+                part.transform.localRotation = Quaternion.Euler(0, 0, Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg);
+                part.transform.localScale = new Vector3(delta.magnitude, width, 1);
             }
         }
     }
