@@ -57,3 +57,6 @@
 - [ADR-007-character-level-and-unlocks.md](adr/ADR-007-character-level-and-unlocks.md): [ADR-005](adr/ADR-005-no-character-level.md)의 무레벨 결정을 대체. 과거 ADR/26 구현 이력은 보존한다.
 - 메인 퀘스트 미완료여도 몬스터 처치로 정상 레벨업한다. 강화가 주 성장축이며 레벨은 보조 성장·콘텐츠/스킬 해금, RP는 환생 영구 성장이다. 자동 스킬2슬롯은 보스 수동 집중 방어를 대체하지 않는다.
 - 기존28번은 View 기술 검토라 유지하고 새 통합 설계에29번을 사용했다. 비주얼 목표와 레인 없는 이동/고정 카메라/Farming 전용 Rage는 유지한다.
+
+## Milestone 2: equipment / enhancement
+[30_EQUIPMENT_ENHANCEMENT_PROTOTYPE.md](30_EQUIPMENT_ENHANCEMENT_PROTOTYPE.md): 무기·방어구/강화 상태·장착 스탯 합산·강화 시도·고정 시드 전후 비교와 재료 테스트 전투. `EquipmentPrototype` 씬의 세션 최소 기능이며 저장/서버·정식 Farming·레벨·스킬2슬롯은 별도다. 최종 경제 수치를 확정하지 않는다.

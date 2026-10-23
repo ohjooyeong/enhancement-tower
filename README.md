@@ -43,3 +43,6 @@ Unity 6000.6.4f1에서 `Assets/Scenes/CombatPrototype.unity`를 열고 Play합�
 `Assets/Scenes/CombatViewComparison.unity`를 열고 Play하면 임시4등신 픽셀 캐릭터+3D환경을 볼 수 있습니다. **Switch view (same run)**으로 기존2D 표시와 같은 전투를 비교하고, 하단1/5/8/12·Stage run·Charge boss/FOCUS GUARD를 사용합니다. 기존 CombatPrototype 씬과 전투 규칙은 보존했습니다. 최종 아트/렌더러 선택 전 비교용이며 실행·검증 범위는 [26](docs/26_COMBAT_PROTOTYPE.md)의 View 비교 항목을 참조하세요.
 
 쿼터뷰의 **Sword motion**을 켜면 영웅이 검을 쥐고 팔·상체를 함께 움직여 베는 임시 표현을 볼 수 있습니다. **1 foe**에서 준비/휘두름/회복을 비교하세요. 끄면 같은 전투에서 기존 막대 표현으로 돌아갑니다. 공격 속도·판정·피해와 집중 방어는 그대로입니다.
+
+## Milestone 2 장비·강화 실행
+`Assets/Scenes/EquipmentPrototype.unity`를 열고 Play하세요. 작업대에서 무기/방어구를 장착·강화한 뒤 **Apply equipment / retry**로 실제 ATK·DEF·최대HP 변화와 전투 결과를 비교합니다. **Equipment / forge**로 돌아가며, 재료가 부족하면 **Material test (1 foe)**로 보충할 수 있습니다. 장비/재료는 Play 중 재도전에 유지되고 Play 종료 후 초기화됩니다. 정식 저장/서버/파밍은 아직 없으며 [30 안내](docs/30_EQUIPMENT_ENHANCEMENT_PROTOTYPE.md)에 조절 값과 수동 검증 방법을 기록했습니다.

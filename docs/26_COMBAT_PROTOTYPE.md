@@ -227,3 +227,6 @@
 - 검증: Unity6000.6.4f1 내장 컴파일러로 Presentation 컴파일 통과 및 Unity Test Runner EditMode **87/87 통과**(이번 XML의 Passed87/Failed0). 임시 Unity Play 검증기에서1마리/보스/12마리 각각600틱, 새 동작ON/OFF·2D↔쿼터뷰 전환·수동 방어 입력을 실행해 순수 전투 모델과 영웅 HP/위치/틱·적HP 일치를 확인했다. 실제 사선 베기의 준비/유효/회복 각 구간을540x960 Metal 렌더 캡처로 확인했다. 기존 Search 인덱서의 내부 예외는 게임 코드와 분리했다. 실제 GUI 클릭/터치·소리/동작 체감·모든4방향·모바일 성능·Windows는 미검증이다.
 - 변경 파일: QuarterViewStage.cs, CombatPrototype.cs 및 이 안내/23/README. 기존 CombatViewComparison 씬의 사용자 조정은 수정/커밋하지 않는다. 성장·퀘스트·스킬 실행기나 새로운 무기 시스템은 추가하지 않았다.
 - 다음 최소 단계: 사용자가 실제 재생에서 준비/휘두름/회복 중 어색한 구간 하나를 선택하면 그 자세와 손/검 위치를 조정한다. 전투 수치를 먼저 바꾸거나 전체 아트 제작으로 확대하지 않는다.
+
+## Milestone 2 연결: 장비·강화 최소 기능
+전투 고도화는 여기서 멈추고 별도 `EquipmentPrototype` 씬에서 무기/방어구 장착·강화→실제 전투 스탯 변화→고정 시드 재도전을 연결한다. 기존 공격/피해 계산은 유지하며 전투 생성 입력에 장비 보너스를 합산한다. 세션 재료 보충용 유한 전투는 정식 Farming 구현이 아니다. 변경/수치/현재 검증·미구현·Unity 절차는 [30_EQUIPMENT_ENHANCEMENT_PROTOTYPE.md](30_EQUIPMENT_ENHANCEMENT_PROTOTYPE.md)를 따른다. 기존 전투 검증 이력은 삭제하지 않는다.

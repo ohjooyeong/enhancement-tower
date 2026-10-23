@@ -90,6 +90,38 @@ public static class CombatPrototypeSceneBuilder
         AssetDatabase.SaveAssets();
         Debug.Log("View comparison scene created; original scene and default renderer preserved.");
     }
+    [MenuItem("Enhancement Tower/Create Equipment Prototype Scene")]
+    public static void CreateEquipmentPrototype()
+    {
+        const string path = "Assets/Scenes/EquipmentPrototype.unity";
+        if (AssetDatabase.LoadAssetAtPath<SceneAsset>(path) != null)
+        {
+            if (!Application.isBatchMode && EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) EditorSceneManager.OpenScene(path);
+            return;
+        }
+        if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+        if (AssetDatabase.LoadAssetAtPath<SceneAsset>("Assets/Scenes/CombatViewComparison.unity") == null) CreateViewComparison();
+        const string dataPath = "Assets/Data/PrototypeEquipment.asset";
+        var definition = AssetDatabase.LoadAssetAtPath<EnhancementTower.Data.EquipmentPrototypeDefinition>(dataPath);
+        if (definition == null)
+        {
+            definition = ScriptableObject.CreateInstance<EnhancementTower.Data.EquipmentPrototypeDefinition>();
+            AssetDatabase.CreateAsset(definition, dataPath);
+        }
+        AssetDatabase.SaveAssets();
+        var scene = EditorSceneManager.OpenScene("Assets/Scenes/CombatViewComparison.unity");
+        definition = AssetDatabase.LoadAssetAtPath<EnhancementTower.Data.EquipmentPrototypeDefinition>(dataPath);
+        if (definition == null) throw new System.InvalidOperationException("Equipment definition could not be loaded after scene switch.");
+        CombatPrototype prototype = null;
+        foreach (GameObject root in scene.GetRootGameObjects()) { prototype = root.GetComponentInChildren<CombatPrototype>(); if (prototype != null) break; }
+        if (prototype == null) throw new System.InvalidOperationException("Source comparison component missing.");
+        var serialized = new SerializedObject(prototype);
+        serialized.FindProperty("enableEquipmentPrototype").boolValue = true;
+        serialized.FindProperty("equipmentDefinition").objectReferenceValue = definition;
+        serialized.FindProperty("randomizeSeedEachRun").boolValue = false;
+        serialized.ApplyModifiedPropertiesWithoutUndo();
+        EditorSceneManager.SaveScene(scene, path, true); EditorSceneManager.OpenScene(path); AssetDatabase.SaveAssets();
+    }
     [MenuItem("Enhancement Tower/Create Default Combo Asset")]
     public static void CreateComboAsset()
     {

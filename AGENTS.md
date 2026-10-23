@@ -76,3 +76,6 @@ Build a playable, mobile-first Unity 6 / C# idle action RPG **강화의 탑**. W
 
 ## 8. Current growth documentation scope (2026-10-23)
 This change authorizes Markdown updates only. Do not implement level/EXP calculations, quest progress/rewards, two-skill execution, ScriptableObject schema changes, Unity scene changes, or a combat rewrite as part of it. Implementation requires a separate task; report the current gaps rather than presenting approved design as shipped behavior. Preserve prior ADRs and prototype validation history.
+
+## 9. Milestone 2 equipment scope (2026-10-23)
+The user separately authorized weapon/armor equip + enhancement + real combat stat comparison. See `docs/30_EQUIPMENT_ENHANCEMENT_PROTOTYPE.md`. Use static definitions and separate session state, configurable prototype numbers and no backend. The preceding documentation-only restriction was for level/quest/skill design; those systems remain outside this equipment task. Preserve existing scenes/user settings, combat rules and manual boss Focus Guard. Do not treat the finite material test as implemented persistent Farming or local RNG as final economy authority.

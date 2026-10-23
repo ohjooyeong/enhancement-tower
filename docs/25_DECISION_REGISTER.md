@@ -93,3 +93,9 @@
 - 이전 문구: `no character EXP/level and no skill leveling at MVP; RP rebirth progression`. 이 중 캐릭터 무레벨/무경험치와 RP만으로 모험가 성장을 설명한 부분은2026-10-23 레벨 도입 결정으로 대체한다. 스킬 자체 레벨 도입은 별도 승인하지 않았다.
 - 이전 자동 스킬1슬롯은2슬롯으로 대체한다.15/21의 오래된 오브2슬롯은 기존 오브1슬롯 기준과 충돌하던 표기이며 이번 변경으로 오브가2개가 되는 것은 아니다. 오브1/자동 스킬2로 정합성을 맞춘다.
 - ADR-005 원문은 삭제하지 않고 Superseded 상태와 ADR-007 링크를 둔다.26의 과거 구현·테스트 기록과28의 View 검토는 그대로 보존한다.
+
+## 2026-10-23 Milestone 2 equipment/enhancement implementation approval
+- User authorized a small playable equipment/enhancement slice after the first combat prototype. Build weapon/armor definitions and runtime instances, equip-to-combat stats, success/failure handling and an observable retry comparison; do not implement levels, quests, two-skill execution, new weapon styles or new combat patterns in this task.
+- Use configurable local prototype rates/costs and linear stat bonuses; preserve no destruction, +1 success/+2 blessing, unchanged failure/rare -1 regression and accumulating pity reset on success. Defaults are test assumptions, not final economy formulas.
+- Local session-only wallet/gear and a finite material-test encounter may support the comparison; they are not authoritative economy, persistent saves, full Farming or offline settlement. No backend is added. Gear applies when creating a new combat run, not by mutating an active Fighter or static SO definitions.
+- Scope, default values, input-to-damage flow, implementation limits and verification are recorded in [30_EQUIPMENT_ENHANCEMENT_PROTOTYPE.md](30_EQUIPMENT_ENHANCEMENT_PROTOTYPE.md). Earlier growth documentation-only scope remains history for level/quest/skill work, not a prohibition on this separately requested equipment slice.

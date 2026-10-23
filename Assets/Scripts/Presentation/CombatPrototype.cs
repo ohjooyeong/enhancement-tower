@@ -1,5 +1,6 @@
 using EnhancementTower.Combat;
 using EnhancementTower.Data;
+using EnhancementTower.Progression;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -51,6 +52,14 @@ namespace EnhancementTower.Presentation
         private SpriteRenderer chargeWarning;
         private LineRenderer sweepWarning;
         private CombatSimulation simulation;
+        [SerializeField] private bool enableEquipmentPrototype;
+        [SerializeField] private EquipmentPrototypeDefinition equipmentDefinition;
+        private EquipmentSession equipment;
+        private bool workshopOpen, materialRun;
+        private int equipmentRun;
+        private string enhancementMessage = "Select an item to equip or enhance.", previousRun = "No previous run.";
+        private EquipmentCombatStats runStats;
+        private Vector2 equipmentScroll;
         private Sprite square;
         private Texture2D texture;
         private ActorView heroView;
@@ -100,6 +109,14 @@ namespace EnhancementTower.Presentation
             attackArea = guide.AddComponent<LineRenderer>(); attackArea.useWorldSpace = false;
             attackArea.sharedMaterial = heroView.Body.sharedMaterial; attackArea.positionCount = 19;
             attackArea.startWidth = attackArea.endWidth = 0.018f; attackArea.enabled = false;
+            if (enableEquipmentPrototype)
+            {
+                if (equipmentDefinition == null) throw new System.InvalidOperationException("Equipment prototype definition is required.");
+                equipment = equipmentDefinition.CreateSession();
+                for (int i = 0; i < equipment.Count; i++)
+                    if (equipment.Item(i).Spec.Slot == EquipmentSlot.Weapon ? equipment.WeaponIndex < 0 : equipment.ArmorIndex < 0) equipment.Equip(i);
+                workshopOpen = true;
+            }
             Restart();
         }
         private void ConfigureView()
@@ -115,6 +132,13 @@ namespace EnhancementTower.Presentation
         }
         private void Restart()
         {
+            if (equipment != null && simulation != null)
+            {
+                long dealt = 0; for (int i = 0; i < simulation.Monsters.Count; i++) dealt += simulation.Monsters[i].DamageTaken;
+                string result = stage != null ? stage.Result.ToString() : !simulation.Hero.Alive ? "DEFEAT" : simulation.LivingMonsters == 0 ? "CLEAR" : "STOPPED";
+                previousRun = $"{result} | {simulation.Ticks / 60f:F1}s | ATK {runStats.Attack} DEF {runStats.Defense} HP {runStats.Health} | dealt {dealt} | kills {simulation.Monsters.Count - simulation.LivingMonsters}";
+            }
+            equipmentRun++;
             if (chargeWarning == null)
                 chargeWarning = MakeSprite("Charge warning", transform, Vector3.zero, Vector2.one, new Color(1, 0.3f, 0.1f, 0.3f), -500);
             chargeWarning.enabled = false;
@@ -134,9 +158,10 @@ namespace EnhancementTower.Presentation
                     if (monsterViews[i] != null) Destroy(monsterViews[i].Root.gameObject);
             actorViewSequence = 1;
             stage = null;
+            materialRun = materialRun && !bossMode && !stageMode && !wallTest && !trapTest;
             bool finite = stageMode && !bossMode && !wallTest && !trapTest;
             StageSettings stageSettings = finite ? (stageDefinition != null ? stageDefinition.Snapshot() : new StageSettings()) : null;
-            int count = bossMode ? 1 : finite ? stageSettings.Total : trapTest ? 8 : wallTest ? 3 : Mathf.Clamp(monsterCount, 1, 12);
+            int count = materialRun ? 1 : bossMode ? 1 : finite ? stageSettings.Total : trapTest ? 8 : wallTest ? 3 : Mathf.Clamp(monsterCount, 1, 12);
             Vector2 playerStart = trapTest ? new Vector2(0, -1.5f) : wallTest ? new Vector2(-2, -2) : heroStart;
             monsterViews = new ActorView[count]; monsterKinds = new PrototypeMonsterKind[count];
             normalCount = fastCount = heavyCount = 0;
@@ -144,7 +169,7 @@ namespace EnhancementTower.Presentation
             FastMonsterSettings fast = fastMonsterDefinition != null ? fastMonsterDefinition.Snapshot() : new FastMonsterSettings();
             DamageProfile heroRules = damageDefinition != null ? damageDefinition.Snapshot(true) : new DamageProfile(0.85f, 1.15f, 0.15f);
             DamageProfile enemyRules = damageDefinition != null ? damageDefinition.Snapshot(false) : new DamageProfile(0.85f, 1.15f, 0.05f);
-            bool mixed = tacticsDefinition != null && tacticsDefinition.mixedThreats, includeFast = includeFastMonsters;
+            bool mixed = !materialRun && tacticsDefinition != null && tacticsDefinition.mixedThreats, includeFast = includeFastMonsters;
             int baseHealth = monsterHealth, baseDamage = monsterDamage;
             int normalDefense = damageDefinition != null ? damageDefinition.monsterDefense : 0;
             int heavyDefense = damageDefinition != null ? damageDefinition.strongMonsterDefense : 3;
@@ -177,10 +202,12 @@ namespace EnhancementTower.Presentation
                 start.x = Mathf.Clamp(start.x, -2, 2); start.y = Mathf.Clamp(start.y, -3, 4);
                 monsters[i] = CreateEnemy(i, new Point(start.x, start.y));
             }
-            int seed = randomizeSeedEachRun ? unchecked((int)System.DateTime.UtcNow.Ticks ^ (++seedCounter * 16777619)) : fixedSeed;
+            int seed = equipment == null && randomizeSeedEachRun ? unchecked((int)System.DateTime.UtcNow.Ticks ^ (++seedCounter * 16777619)) : fixedSeed;
+            int baseDefense = damageDefinition != null ? damageDefinition.heroDefense : 1;
+            runStats = equipment != null ? equipment.Stats(heroHealth, heroDamage, baseDefense) : new EquipmentCombatStats(heroHealth, heroDamage, baseDefense);
             simulation = new CombatSimulation(
-                new Fighter(new Point(playerStart.x, playerStart.y), heroHealth, heroDamage, 1.9f, 0.85f,
-                    defense: damageDefinition != null ? damageDefinition.heroDefense : 1, damageProfile: heroRules),
+                new Fighter(new Point(playerStart.x, playerStart.y), runStats.Health, runStats.Attack, 1.9f, 0.85f,
+                    defense: runStats.Defense, damageProfile: heroRules),
                 monsters, comboDefinition != null ? comboDefinition.Snapshot() : AttackStep.DefaultCombo(),
                 new RepositionSettings(enableReposition, pressureThreshold, repositionDistance, repositionCooldown, retreatDistance), trapTest ? 0 : knockbackDistance,
                 tacticsDefinition != null ? tacticsDefinition.Snapshot() : new TacticalSettings(movementTemperature: 0.35f, targetTemperature: 0.55f),
@@ -236,7 +263,13 @@ namespace EnhancementTower.Presentation
         private void Update()
         {
             if (simulation == null) return;
-            if (stage != null) stage.Advance(Time.deltaTime); else simulation.Advance(Time.deltaTime);
+            if (!workshopOpen)
+            {
+                if (stage != null) stage.Advance(Time.deltaTime);
+                else if (equipment == null || simulation.Hero.Alive && simulation.LivingMonsters > 0) simulation.Advance(Time.deltaTime);
+            }
+            if (equipment != null && materialRun && simulation.Hero.Alive && simulation.LivingMonsters == 0)
+                if (equipment.RewardMaterialRun(equipmentRun)) enhancementMessage = "Material test clear: +40 Gold / +3 Stones (prototype reward).";
             SyncMonsterViews();
             // Preserve the entire field on narrow portrait displays, with a fixed orientation.
             chargeWarning.enabled = bossMode && simulation.Hero.Alive && simulation.Monster.Alive &&
@@ -374,10 +407,10 @@ namespace EnhancementTower.Presentation
             bool fastEnemies = GUI.Toggle(new Rect(12, 494, 180, 30), includeFastMonsters, "Include fast foes");
             if (fastEnemies != includeFastMonsters) { includeFastMonsters = fastEnemies; Restart(); }
             GUI.Label(new Rect(12, 524, 400, 30), $"Roster: Normal {normalCount} | Fast {fastCount} | Heavy {heavyCount}");
-            GUI.Label(new Rect(12, 12, 400, 30), $"Hero {simulation.Hero.Health}/{heroHealth}  {simulation.Hero.State}");
+            GUI.Label(new Rect(12, 12, 400, 30), $"Hero {simulation.Hero.Health}/{simulation.Hero.MaxHealth}  {simulation.Hero.State}");
             GUI.Label(new Rect(12, 40, 400, 30), $"Enemies {simulation.LivingMonsters}/{simulation.Monsters.Count} | Swing hits: {simulation.Hero.LastHitCount}");
             if (GUI.Button(new Rect(160, 558, 140, 32), "Charge boss"))
-            { bossMode = true; stageMode = trapTest = wallTest = false; Restart(); }
+            { materialRun = false; bossMode = true; stageMode = trapTest = wallTest = false; Restart(); }
             if (bossMode && simulation.Hero.Alive && simulation.Monster.Alive)
             {
                 float width = Mathf.Min(280, Screen.width - 24);
@@ -429,20 +462,28 @@ namespace EnhancementTower.Presentation
             Matrix4x4 previous = GUI.matrix;
             GUI.matrix = Matrix4x4.TRS(new Vector3(safe.x, Screen.height - safe.yMax, 0), Quaternion.identity, Vector3.one * scale);
             float width = safe.width / scale, height = safe.height / scale;
+            if (equipment != null && workshopOpen)
+            { DrawWorkshop(width, height); GUI.matrix = previous; return; }
             GUI.Box(new Rect(8, 8, width - 16, 112), "");
             GUI.Label(new Rect(16, 12, width - 32, 24), $"VIEW STUDY | {(QuarterView ? "2D sprites + 3D" : "Original 2D")}");
-            GUI.Label(new Rect(16, 36, width - 32, 24), $"Hero {simulation.Hero.Health}/{heroHealth} | Foes {simulation.LivingMonsters}");
+            GUI.Label(new Rect(16, 36, width - 32, 24), $"Hero {simulation.Hero.Health}/{simulation.Hero.MaxHealth} | Foes {simulation.LivingMonsters}");
             GUI.Label(new Rect(16, 60, width - 32, 24), stage != null ? $"{stage.Result} | {stage.Kills}/{stage.Settings.Total} | {stage.SecondsRemaining:F1}s" : bossMode ? $"Boss {simulation.BossPhase} | Guarded {simulation.GuardedHits}" : $"Seed {simulation.Seed} | {simulation.Hero.State}");
             if (GUI.Button(new Rect(16, 88, 166, 26), "Switch view (same run)")) { quarterView = !quarterView; ConfigureView(); }
             if (GUI.Button(new Rect(width - 100, 88, 84, 26), "Restart")) Restart();
+            if (equipment != null)
+            {
+                if (GUI.Button(new Rect(16, 124, 130, 30), "Equipment / forge")) workshopOpen = true;
+                GUI.Label(new Rect(154, 126, width - 166, 26), $"ATK {runStats.Attack} DEF {runStats.Defense}");
+                GUI.Label(new Rect(16, 156, width - 32, 26), $"Gold {equipment.Gold} / Stones {equipment.Stones} | Fixed seed {simulation.Seed}");
+            }
             if (!simulation.Hero.Alive || simulation.LivingMonsters == 0 && stage == null)
-                GUI.Label(new Rect(16, 130, width - 32, 28), simulation.Hero.Alive ? "CLEAR" : "DEFEAT");
-            if (GUI.Button(new Rect(12, height - 160, 76, 32), "1 foe")) { bossMode = stageMode = trapTest = wallTest = false; monsterCount = 1; Restart(); }
-            if (GUI.Button(new Rect(92, height - 160, 76, 32), "5 foes")) { bossMode = stageMode = trapTest = wallTest = false; monsterCount = 5; Restart(); }
-            if (GUI.Button(new Rect(172, height - 160, 76, 32), "8 foes")) { bossMode = stageMode = trapTest = wallTest = false; monsterCount = 8; Restart(); }
-            if (GUI.Button(new Rect(252, height - 160, 76, 32), "12 foes")) { bossMode = stageMode = trapTest = wallTest = false; monsterCount = 12; Restart(); }
-            if (GUI.Button(new Rect(128, height - 120, 112, 32), "Stage run")) { bossMode = trapTest = wallTest = false; stageMode = true; Restart(); }
-            if (GUI.Button(new Rect(12, height - 120, 112, 32), "Charge boss")) { bossMode = true; stageMode = trapTest = wallTest = false; Restart(); }
+                GUI.Label(new Rect(16, equipment != null ? 184 : 130, width - 32, 28), simulation.Hero.Alive ? "CLEAR" : "DEFEAT");
+            if (GUI.Button(new Rect(12, height - 160, 76, 32), "1 foe")) { materialRun = false; bossMode = stageMode = trapTest = wallTest = false; monsterCount = 1; Restart(); }
+            if (GUI.Button(new Rect(92, height - 160, 76, 32), "5 foes")) { materialRun = false; bossMode = stageMode = trapTest = wallTest = false; monsterCount = 5; Restart(); }
+            if (GUI.Button(new Rect(172, height - 160, 76, 32), "8 foes")) { materialRun = false; bossMode = stageMode = trapTest = wallTest = false; monsterCount = 8; Restart(); }
+            if (GUI.Button(new Rect(252, height - 160, 76, 32), "12 foes")) { materialRun = false; bossMode = stageMode = trapTest = wallTest = false; monsterCount = 12; Restart(); }
+            if (GUI.Button(new Rect(128, height - 120, 112, 32), "Stage run")) { materialRun = false; bossMode = trapTest = wallTest = false; stageMode = true; Restart(); }
+            if (GUI.Button(new Rect(12, height - 120, 112, 32), "Charge boss")) { materialRun = false; bossMode = true; stageMode = trapTest = wallTest = false; Restart(); }
             showSwordMotion = GUI.Toggle(new Rect(16, height - 198, 150, 28), showSwordMotion, "Sword motion");
             showAttackArea = GUI.Toggle(new Rect(180, height - 198, 150, 28), showAttackArea, "Attack area");
             if (bossMode && simulation.Hero.Alive && simulation.Monster.Alive)
@@ -452,6 +493,37 @@ namespace EnhancementTower.Presentation
                 GUI.enabled = true;
             }
             GUI.matrix = previous;
+        }
+        private void DrawWorkshop(float width, float height)
+        {
+            GUI.Box(new Rect(8, 8, width - 16, height - 16), "EQUIPMENT / ENHANCEMENT PROTOTYPE");
+            GUI.Label(new Rect(20, 36, width - 40, 24), $"Gold {equipment.Gold} | Stones {equipment.Stones} (session only)");
+            var next = equipment.Stats(heroHealth, heroDamage, damageDefinition != null ? damageDefinition.heroDefense : 1);
+            GUI.Label(new Rect(20, 62, width - 40, 24), $"Next run: ATK {runStats.Attack} -> {next.Attack} | DEF {runStats.Defense} -> {next.Defense}");
+            GUI.Label(new Rect(20, 86, width - 40, 24), $"Max HP {runStats.Health} -> {next.Health} | no item destruction");
+            equipmentScroll = GUI.BeginScrollView(new Rect(16, 118, width - 32, height - 340), equipmentScroll, new Rect(0, 0, width - 55, equipment.Count * 102));
+            for (int i = 0; i < equipment.Count; i++)
+            {
+                var item = equipment.Item(i); float y = i * 102;
+                GUI.Label(new Rect(4, y, width - 70, 24), $"{item.Spec.Name} +{item.Level} {(equipment.IsEquipped(i) ? "[EQUIPPED]" : "")}");
+                GUI.Label(new Rect(4, y + 24, width - 70, 24), item.Spec.Slot == EquipmentSlot.Weapon ? $"ATK +{item.Power}" : $"DEF +{item.Power} / HP +{item.Health}");
+                if (GUI.Button(new Rect(4, y + 50, 78, 36), equipment.IsEquipped(i) ? "Unequip" : "Equip"))
+                { if (equipment.IsEquipped(i)) equipment.Unequip(item.Spec.Slot); else equipment.Equip(i); }
+                GUI.enabled = equipment.CanEnhance(i);
+                if (GUI.Button(new Rect(90, y + 50, width - 160, 36), $"Enhance {equipment.Policy.Chance(item):P0} | {equipment.Policy.GoldCost(item)}G/{equipment.Policy.StoneCost}S"))
+                {
+                    int before = item.Level; var outcome = equipment.Enhance(i);
+                    enhancementMessage = $"{item.Spec.Name}: {outcome} +{before} -> +{item.Level} | pity failures {item.Failures}";
+                }
+                GUI.enabled = true;
+            }
+            GUI.EndScrollView();
+            GUI.Label(new Rect(20, height - 210, width - 40, 48), enhancementMessage, new GUIStyle(GUI.skin.label) { wordWrap = true });
+            GUI.Label(new Rect(20, height - 160, width - 40, 48), "Previous: " + previousRun, new GUIStyle(GUI.skin.label) { wordWrap = true });
+            if (GUI.Button(new Rect(20, height - 104, width - 40, 36), "Apply equipment / retry same encounter"))
+            { workshopOpen = false; Restart(); }
+            if (GUI.Button(new Rect(20, height - 60, width - 40, 36), "Material test (1 foe): earn 40G / 3 stones"))
+            { materialRun = true; bossMode = stageMode = wallTest = trapTest = false; workshopOpen = false; Restart(); }
         }
         private void OnDestroy() { quarterStage?.Dispose(); feedback?.Dispose(); if (square != null) Destroy(square); if (texture != null) Destroy(texture); }
     }
