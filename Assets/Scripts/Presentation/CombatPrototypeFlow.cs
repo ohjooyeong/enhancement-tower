@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using EnhancementTower.Combat;
 using EnhancementTower.Progression;
 using UnityEngine;
@@ -12,17 +13,21 @@ namespace EnhancementTower.Presentation
         [SerializeField] private bool enableJourneyPrototype;
         private PrototypeJourney journey;
         private Canvas journeyCanvas;
+        private CanvasScaler journeyScaler;
         private RectTransform journeyRoot, journeyPage;
-        private CanvasGroup journeyFade;
         private GameObject journeyEvents;
         private Font journeyFont;
         private bool journeyDirty;
         private Vector2 journeySize;
         private int selectedItem;
-        private float forgeUntil, pageOpened, nextHudUpdate;
+        private float forgeUntil, nextHudUpdate;
         private string forgeNotice = "Choose equipment, enhance it, then challenge the tower.";
         private string journeyResult = "Your first ascent starts at the gate.";
         private Color noticeColor = new Color(.55f, .82f, .77f);
+        private Text journeyWallet, campStats, campTitle, campPower, campChance, campNotice;
+        private Button campEquip, campEnhance;
+        private Button[] campSelectors;
+        private readonly List<Button> journeyButtons = new List<Button>();
         private Text journeyHeroText, journeyStatusText, journeyGuardText;
         private Image journeyHealthFill;
         private Button journeyGuard;
@@ -38,8 +43,9 @@ namespace EnhancementTower.Presentation
             var go = new GameObject("Journey UI", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             go.transform.SetParent(transform, false); journeyCanvas = go.GetComponent<Canvas>();
             journeyCanvas.renderMode = RenderMode.ScreenSpaceOverlay; journeyCanvas.sortingOrder = 30000;
-            var scaler = go.GetComponent<CanvasScaler>(); scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(400, 800); scaler.matchWidthOrHeight = 0;
+            var scaler = journeyScaler = go.GetComponent<CanvasScaler>(); scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(400, 720);
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
             journeyRoot = new GameObject("Safe area", typeof(RectTransform)).GetComponent<RectTransform>();
             journeyRoot.SetParent(go.transform, false); journeyRoot.offsetMin = journeyRoot.offsetMax = Vector2.zero;
             // Created once for this standalone prototype scene; do not change any existing EventSystem.
@@ -53,14 +59,16 @@ namespace EnhancementTower.Presentation
         private void UpdateJourney()
         {
             Rect safe = Screen.safeArea;
+            if (safe.width <= 0 || safe.height <= 0) return;
+            // Fit the usable area, including notches, rather than only the full screen width.
+            journeyScaler.referenceResolution = new Vector2(400 * Screen.width / safe.width, 720 * Screen.height / safe.height);
             Vector2 min = new Vector2(safe.xMin / Screen.width, safe.yMin / Screen.height);
             Vector2 max = new Vector2(safe.xMax / Screen.width, safe.yMax / Screen.height);
             if (journeyRoot.anchorMin != min || journeyRoot.anchorMax != max)
             { journeyRoot.anchorMin = min; journeyRoot.anchorMax = max; journeyDirty = true; }
-            if (journeySize != journeyRoot.rect.size) { journeySize = journeyRoot.rect.size; journeyDirty = true; }
-            if (forgeUntil > 0 && Time.unscaledTime >= forgeUntil) { forgeUntil = 0; journeyDirty = true; }
+            if ((journeySize - journeyRoot.rect.size).sqrMagnitude > .25f) { journeySize = journeyRoot.rect.size; journeyDirty = true; }
+            if (forgeUntil > 0 && Time.unscaledTime >= forgeUntil) { forgeUntil = 0; RefreshJourneyCamp(); }
             if (journeyDirty && journeyRoot.rect.width > 0) BuildJourneyPage();
-            if (journeyFade != null) journeyFade.alpha = Mathf.Clamp01((Time.unscaledTime - pageOpened) / .16f);
             workshopOpen = journey.Screen != JourneyScreen.Combat;
             if (journey.Screen != JourneyScreen.Combat || Time.unscaledTime < nextHudUpdate) return;
             nextHudUpdate = Time.unscaledTime + .1f;
@@ -126,14 +134,15 @@ namespace EnhancementTower.Presentation
             colors.pressedColor = new Color(.65f, .85f, .8f); colors.disabledColor = new Color(.40f, .43f, .44f); button.colors = colors;
             var label = Words(image.transform, new Rect(8, 0, rect.width - 16, rect.height), value, 15, primary ? Ink : Color.white);
             label.alignment = TextAnchor.MiddleCenter;
-            button.onClick.AddListener(() => { if (forgeUntil <= 0) click(); }); return button;
+            button.onClick.AddListener(() => { if (forgeUntil <= 0) click(); }); journeyButtons.Add(button); return button;
         }
         private void BuildJourneyPage()
         {
             journeyDirty = false; nextHudUpdate = 0;
             if (journeyPage != null) { journeyPage.gameObject.SetActive(false); Destroy(journeyPage.gameObject); }
             journeyPage = UiRect("Screen " + journey.Screen, journeyRoot, new Rect(0, 0, PageWidth, PageHeight));
-            journeyFade = journeyPage.gameObject.AddComponent<CanvasGroup>(); pageOpened = Time.unscaledTime; journeyFade.alpha = 0;
+            // Screen changes are opaque. Data refreshes keep their existing input targets alive.
+            journeyButtons.Clear(); campSelectors = null;
             journeyHeroText = journeyStatusText = journeyGuardText = null; journeyGuard = null;
             float w = PageWidth, h = PageHeight;
             bool combat = journey.Screen == JourneyScreen.Combat;
@@ -141,7 +150,7 @@ namespace EnhancementTower.Presentation
             Panel("Header", journeyPage, new Rect(0, 0, w, 94), Ink);
             Words(journeyPage, new Rect(20, 14, w - 40, 20), "ENHANCEMENT TOWER", 12, Accent);
             Words(journeyPage, new Rect(20, 38, w - 40, 30), combat ? journey.Stage(journey.Current).Name : journey.Screen == JourneyScreen.Camp ? "CAMP / FORGE" : journey.Screen == JourneyScreen.Stages ? "CHOOSE YOUR CHALLENGE" : "ENCOUNTER RESULT", 22);
-            Words(journeyPage, new Rect(20, 72, w - 40, 20), $"GOLD {equipment.Gold}    STONES {equipment.Stones}    ROUTE {journey.Unlocked}/4", 12, Muted);
+            journeyWallet = Words(journeyPage, new Rect(20, 72, w - 40, 20), $"GOLD {equipment.Gold}    STONES {equipment.Stones}    ROUTE {journey.Unlocked}/4", 12, Muted);
             if (journey.Screen == JourneyScreen.Camp) BuildCamp(w, h);
             else if (journey.Screen == JourneyScreen.Stages) BuildStageSelection(w, h);
             else if (journey.Screen == JourneyScreen.Result) BuildJourneyResult(w, h);
@@ -149,37 +158,64 @@ namespace EnhancementTower.Presentation
         }
         private void BuildCamp(float w, float h)
         {
-            var stats = equipment.Stats(heroHealth, heroDamage, damageDefinition != null ? damageDefinition.heroDefense : 1);
             Panel("Stats", journeyPage, new Rect(16, 104, w - 32, 66), Card);
-            Words(journeyPage, new Rect(28, 114, w - 56, 22), $"NEXT RUN   ATK {stats.Attack}  /  DEF {stats.Defense}  /  HP {stats.Health}", 14, Accent);
+            campStats = Words(journeyPage, new Rect(28, 114, w - 56, 22), "", 14, Accent);
             Words(journeyPage, new Rect(28, 140, w - 56, 22), journey.Active ? $"Paused run keeps ATK {runStats.Attack} / DEF {runStats.Defense}." : "Equipment applies when you start a new encounter.", 12, Muted);
+            campSelectors = new Button[equipment.Count];
             for (int i = 0; i < equipment.Count; i++)
             {
                 int index = i; var entry = equipment.Item(i); float cell = (w - 44) / 2;
                 var selector = Action(journeyPage, new Rect(16 + i % 2 * (cell + 12), 182 + i / 2 * 52, cell, 44),
                     $"{entry.Spec.Name}\n+{entry.Level} {(equipment.IsEquipped(i) ? "[EQUIPPED]" : "")}",
-                    () => { selectedItem = index; journeyDirty = true; }, primary: selectedItem == i);
-                selector.GetComponentInChildren<Text>().fontSize = 12;
+                    () => { selectedItem = index; RefreshJourneyCamp(); }, primary: selectedItem == i);
+                selector.GetComponentInChildren<Text>().fontSize = 12; campSelectors[i] = selector;
             }
             var item = equipment.Item(selectedItem);
             float top = 292;
             Panel("Selected equipment", journeyPage, new Rect(16, top, w - 32, 156), Card);
-            Words(journeyPage, new Rect(28, top + 10, w - 56, 26), $"{item.Spec.Name}  +{item.Level}", 19, Gold);
-            Words(journeyPage, new Rect(28, top + 40, w - 56, 22), item.Spec.Slot == EquipmentSlot.Weapon ? $"ATK +{item.Power}   /   per level +{item.Spec.PowerPerLevel}" : $"DEF +{item.Power} / HP +{item.Health}   |   per level +{item.Spec.PowerPerLevel} / +{item.Spec.HealthPerLevel}", 13, Muted);
-            Words(journeyPage, new Rect(28, top + 66, w - 56, 22), $"SUCCESS {equipment.Policy.Chance(item):P0}    COST {equipment.Policy.GoldCost(item)}G / {equipment.Policy.StoneCost}S", 14);
-            Action(journeyPage, new Rect(28, top + 98, 92, 44), equipment.IsEquipped(selectedItem) ? "UNEQUIP" : "EQUIP", () => {
-                if (equipment.IsEquipped(selectedItem)) equipment.Unequip(item.Spec.Slot); else equipment.Equip(selectedItem);
-                forgeNotice = "Loadout updated. Start a new encounter to apply it."; noticeColor = Accent; journeyDirty = true;
+            campTitle = Words(journeyPage, new Rect(28, top + 10, w - 56, 26), $"{item.Spec.Name}  +{item.Level}", 19, Gold);
+            campPower = Words(journeyPage, new Rect(28, top + 40, w - 56, 22), item.Spec.Slot == EquipmentSlot.Weapon ? $"ATK +{item.Power}   /   per level +{item.Spec.PowerPerLevel}" : $"DEF +{item.Power} / HP +{item.Health}   |   per level +{item.Spec.PowerPerLevel} / +{item.Spec.HealthPerLevel}", 13, Muted);
+            campChance = Words(journeyPage, new Rect(28, top + 66, w - 56, 22), $"SUCCESS {equipment.Policy.Chance(item):P0}    COST {equipment.Policy.GoldCost(item)}G / {equipment.Policy.StoneCost}S", 14);
+            campEquip = Action(journeyPage, new Rect(28, top + 98, 92, 44), equipment.IsEquipped(selectedItem) ? "UNEQUIP" : "EQUIP", () => {
+                var chosen = equipment.Item(selectedItem);
+                if (equipment.IsEquipped(selectedItem)) equipment.Unequip(chosen.Spec.Slot); else equipment.Equip(selectedItem);
+                forgeNotice = "Loadout updated. Start a new encounter to apply it."; noticeColor = Accent; RefreshJourneyCamp();
             });
-            Action(journeyPage, new Rect(132, top + 98, w - 160, 44), forgeUntil > 0 ? "FORGING..." : equipment.CanEnhance(selectedItem) ? "ENHANCE" : "NEED MATERIALS", EnhanceJourneyItem, equipment.CanEnhance(selectedItem), true);
+            campEnhance = Action(journeyPage, new Rect(132, top + 98, w - 160, 44), forgeUntil > 0 ? "FORGING..." : equipment.CanEnhance(selectedItem) ? "ENHANCE" : "NEED MATERIALS", EnhanceJourneyItem, equipment.CanEnhance(selectedItem), true);
             Panel("Forge result", journeyPage, new Rect(16, 460, w - 32, 94), Card);
-            Words(journeyPage, new Rect(28, 470, w - 56, 74), forgeNotice, 14, noticeColor);
+            campNotice = Words(journeyPage, new Rect(28, 470, w - 56, 74), forgeNotice, 14, noticeColor);
             if (journey.Active) Action(journeyPage, new Rect(16, h - 144, w - 32, 42), "RESUME PAUSED ENCOUNTER", () => OpenJourney(JourneyScreen.Combat));
             Action(journeyPage, new Rect(16, h - 94, w - 32, 50), "CHOOSE STAGE  >", () => OpenJourney(JourneyScreen.Stages), primary: true);
             Words(journeyPage, new Rect(20, h - 32, w - 40, 22), "No item destruction. Progress lasts for this Play session.", 11, Muted);
+            RefreshJourneyCamp();
+        }
+        private void RefreshJourneyCamp()
+        {
+            if (journey.Screen != JourneyScreen.Camp || campSelectors == null) return;
+            bool ready = forgeUntil <= 0;
+            foreach (var button in journeyButtons) button.interactable = ready;
+            journeyWallet.text = $"GOLD {equipment.Gold}    STONES {equipment.Stones}    ROUTE {journey.Unlocked}/4";
+            var stats = equipment.Stats(heroHealth, heroDamage, damageDefinition != null ? damageDefinition.heroDefense : 1);
+            campStats.text = $"NEXT RUN   ATK {stats.Attack}  /  DEF {stats.Defense}  /  HP {stats.Health}";
+            for (int i = 0; i < campSelectors.Length; i++)
+            {
+                var entry = equipment.Item(i); var label = campSelectors[i].GetComponentInChildren<Text>();
+                label.text = $"{entry.Spec.Name}\n+{entry.Level} {(equipment.IsEquipped(i) ? "[EQUIPPED]" : "")}";
+                campSelectors[i].GetComponent<Image>().color = i == selectedItem ? Accent : new Color(.22f, .29f, .31f);
+                label.color = i == selectedItem ? Ink : Color.white;
+            }
+            var item = equipment.Item(selectedItem);
+            campTitle.text = $"{item.Spec.Name}  +{item.Level}";
+            campPower.text = item.Spec.Slot == EquipmentSlot.Weapon ? $"ATK +{item.Power}   /   per level +{item.Spec.PowerPerLevel}" : $"DEF +{item.Power} / HP +{item.Health}   |   per level +{item.Spec.PowerPerLevel} / +{item.Spec.HealthPerLevel}";
+            campChance.text = $"SUCCESS {equipment.Policy.Chance(item):P0}    COST {equipment.Policy.GoldCost(item)}G / {equipment.Policy.StoneCost}S";
+            campEquip.GetComponentInChildren<Text>().text = equipment.IsEquipped(selectedItem) ? "UNEQUIP" : "EQUIP";
+            campEnhance.interactable = ready && equipment.CanEnhance(selectedItem);
+            campEnhance.GetComponentInChildren<Text>().text = !ready ? "FORGING..." : equipment.CanEnhance(selectedItem) ? "ENHANCE" : "NEED MATERIALS";
+            campNotice.text = forgeNotice; campNotice.color = noticeColor;
         }
         private void EnhanceJourneyItem()
         {
+            if (forgeUntil > 0) return;
             var item = equipment.Item(selectedItem); int level = item.Level, gold = equipment.Gold, stones = equipment.Stones;
             long power = item.Power, health = item.Health;
             var outcome = equipment.Enhance(selectedItem);
@@ -187,7 +223,7 @@ namespace EnhancementTower.Presentation
             forgeNotice = $"{outcome.ToString().ToUpperInvariant()}   +{level}  >  +{item.Level}\n" +
                 (item.Spec.Slot == EquipmentSlot.Weapon ? $"ATK {power} > {item.Power}" : $"DEF {power} > {item.Power} / HP {health} > {item.Health}") +
                 $"\nSpent {gold - equipment.Gold}G / {stones - equipment.Stones}S   |   Next chance {equipment.Policy.Chance(item):P0}";
-            forgeUntil = Time.unscaledTime + .65f; journeyDirty = true;
+            forgeUntil = Time.unscaledTime + .65f; RefreshJourneyCamp();
         }
         private void BuildStageSelection(float w, float h)
         {
