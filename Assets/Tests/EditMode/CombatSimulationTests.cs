@@ -3,11 +3,76 @@ using NUnit.Framework;
 
 public class CombatSimulationTests
 {
+    private static CombatSimulation ManualBattle()
+    {
+        var battle = new CombatSimulation(new Fighter(new Point(0, -1), 10000, 1, 0, 0.85f),
+            new Fighter(new Point(0, 2), 10000, 100, 0, 0.85f));
+        battle.EnableChargeBoss(battle.Monster);
+        return battle;
+    }
+    [Test]
+    public void ManualGuardIsQueuedHasCooldownAndExpires()
+    {
+        var battle = ManualBattle();
+        Assert.IsTrue(battle.RequestBossGuard());
+        Assert.IsFalse(battle.GuardActive);
+        Assert.IsFalse(battle.RequestBossGuard());
+        battle.Advance(CombatSimulation.Tick);
+        Assert.IsTrue(battle.GuardActive);
+        Assert.AreEqual(1, battle.GuardUses);
+        battle.Advance(0.5);
+        Assert.IsFalse(battle.GuardActive);
+        Assert.IsFalse(battle.RequestBossGuard());
+        battle.Advance(3.5);
+        Assert.IsTrue(battle.RequestBossGuard());
+    }
+    [Test]
+    public void TimedGuardReducesChargeDamageWithoutInvulnerabilityOrAutoDodge()
+    {
+        var guarded = ManualBattle(); var idle = ManualBattle();
+        while (guarded.BossPhase != ChargePhase.Charging)
+        { guarded.Advance(CombatSimulation.Tick); idle.Advance(CombatSimulation.Tick); }
+        // Wait until impact is inside the guard window, rather than guarding at charge start.
+        while ((guarded.Monster.Position - guarded.Hero.Position).Length > 2)
+        { guarded.Advance(CombatSimulation.Tick); idle.Advance(CombatSimulation.Tick); }
+        Assert.IsTrue(guarded.RequestBossGuard());
+        while (guarded.BossPhase != ChargePhase.Recovery)
+        { guarded.Advance(CombatSimulation.Tick); idle.Advance(CombatSimulation.Tick); }
+        Assert.AreEqual(1, guarded.GuardedHits);
+        Assert.Greater(guarded.Hero.DamageTaken, 0);
+        Assert.Less(guarded.Hero.DamageTaken, idle.Hero.DamageTaken);
+        Assert.AreEqual(1, idle.Hero.HitsTaken);
+        Assert.GreaterOrEqual((guarded.Hero.Position - guarded.Monster.Position).Length, 0.559f);
+    }
+    [Test]
+    public void GuardRejectsNormalCombatAndDeadBossAndReplaysFixedTickInputs()
+    {
+        var normal = new CombatSimulation(new Fighter(new Point(), 100, 1, 0, .85f),
+            new Fighter(new Point(0, 2), 100, 1, 0, .85f));
+        Assert.IsFalse(normal.RequestBossGuard());
+        var a = ManualBattle(); var b = ManualBattle();
+        for (int block = 0; block < 180; block++)
+        {
+            if (block % 120 == 0) { a.RequestBossGuard(); b.RequestBossGuard(); }
+            a.Advance(1.0 / 30);
+            for (int j = 0; j < 4; j++) b.Advance(1.0 / 120);
+        }
+        Assert.AreEqual(a.Hero.Health, b.Hero.Health);
+        Assert.AreEqual(a.GuardedHits, b.GuardedHits);
+        Assert.AreEqual(a.GuardUses, b.GuardUses);
+        Assert.AreEqual(a.Ticks, b.Ticks);
+        var dead = new CombatSimulation(new Fighter(new Point(0, 1.3f), 1000, 1000, 0, .85f),
+            new Fighter(new Point(0, 2), 1, 1, 0, .85f));
+        dead.EnableChargeBoss(dead.Monster);
+        dead.Advance(1);
+        Assert.IsFalse(dead.Monster.Alive);
+        Assert.IsFalse(dead.RequestBossGuard());
+    }
     private static CombatSimulation BossBattle(float heroSpeed = 1.9f)
     {
         var battle = new CombatSimulation(new Fighter(new Point(0, -1), 10000, 1, heroSpeed, 0.85f),
             new Fighter(new Point(0, 2), 10000, 6, 0, 0.85f));
-        battle.EnableChargeBoss(battle.Monster);
+        battle.EnableChargeBoss(battle.Monster, manualDefense: false);
         return battle;
     }
     [Test]
@@ -107,7 +172,7 @@ public class CombatSimulationTests
             var battle = new CombatSimulation(
                 new Fighter(new Point(0, 1.3f), 10000, lowerHealth ? 6000 : 1, 0, 0.85f),
                 new Fighter(new Point(0, 2), 10000, 6, 0, 0.85f));
-            battle.EnableChargeBoss(battle.Monster);
+            battle.EnableChargeBoss(battle.Monster, manualDefense: false);
             for (int i = 0; i < 120 && battle.Monster.HitsTaken == 0; i++) battle.Advance(CombatSimulation.Tick);
             Assert.AreEqual(1, battle.Monster.HitsTaken);
             battle.Hero.Position = new Point(0, -1);
@@ -135,7 +200,7 @@ public class CombatSimulationTests
         var boss = new Fighter(new Point(0.8f, 1.8f), 10000, 10, 1.55f, 0.85f, 0.32f, 0.48f, defense: 3);
         var battle = new CombatSimulation(hero, new[] { boss }, null,
             tactics: new TacticalSettings(movementTemperature: 0.35f, targetTemperature: 0.55f), seed: seed);
-        battle.EnableChargeBoss(boss);
+        battle.EnableChargeBoss(boss, manualDefense: false);
         int meleeHits = 0, lastHits = 0;
         for (int i = 0; i < 1800; i++)
         {

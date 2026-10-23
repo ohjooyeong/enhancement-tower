@@ -140,17 +140,43 @@ namespace EnhancementTower.Combat
         public bool BossEnraged => ChargeBoss != null && ChargeBoss.Health <= ChargeBoss.MaxHealth / 2;
         public float BossSweepRange => ChargeBoss == null ? 0 : ChargeBoss.Range * 1.55f;
         public const float BossSweepArc = 150;
+        public bool ManualBossDefense { get; private set; }
+        public const float GuardDuration = 0.45f, GuardCooldown = 4f;
+        public bool GuardActive => Ticks < guardEndTick;
+        public float GuardSecondsRemaining => Math.Max(0, guardReadyTick - Ticks) * Tick;
+        public int GuardUses { get; private set; }
+        public int GuardedHits { get; private set; }
+        private int guardEndTick, guardReadyTick;
+        private bool guardRequested;
+        // Queue an edge-triggered command; simulation consumes it on the next fixed tick.
+        public bool RequestBossGuard()
+        {
+            if (!ManualBossDefense || !Hero.Alive || ChargeBoss == null || !ChargeBoss.Alive ||
+                guardRequested || Ticks < guardReadyTick) return false;
+            guardRequested = true;
+            return true;
+        }
+        private void ConsumeGuardRequest()
+        {
+            if (!guardRequested) return;
+            guardRequested = false;
+            if (!Hero.Alive || ChargeBoss == null || !ChargeBoss.Alive) return;
+            guardEndTick = Ticks + (int)Math.Round(GuardDuration / Tick);
+            guardReadyTick = Ticks + (int)Math.Round(GuardCooldown / Tick);
+            GuardUses++;
+        }
         private float chargeTime, chargeRemaining, chargeCooldown = 3;
         private bool sweepHit, sweepStarted;
         private Point chargeAim, dodgeGoal;
         private bool dodgeChosen;
         private float telegraphSeconds, chargeSpeed, chargeDistance;
-        public void EnableChargeBoss(Fighter boss, float telegraph = 1.1f, float speed = 5, float distance = 3.2f)
+        public void EnableChargeBoss(Fighter boss, float telegraph = 1.1f, float speed = 5, float distance = 3.2f, bool manualDefense = true)
         {
             float sum = telegraph + speed + distance;
             if (Ticks != 0 || boss == null || !enemies.Contains(boss) || ChargeBoss != null ||
                 float.IsNaN(sum) || float.IsInfinity(sum) || telegraph < 0.1f || speed <= 0 || distance <= 0)
                 throw new ArgumentException("Invalid boss configuration or simulation already started.");
+            ManualBossDefense = manualDefense;
             ChargeBoss = boss; telegraphSeconds = telegraph; chargeSpeed = speed; chargeDistance = distance;
         }
         private bool StepChargeBoss()
@@ -238,7 +264,7 @@ namespace EnhancementTower.Combat
         }
         private bool AvoidCharge()
         {
-            if (ChargeBoss == null || !ChargeBoss.Alive || !Hero.Alive ||
+            if (ManualBossDefense || ChargeBoss == null || !ChargeBoss.Alive || !Hero.Alive ||
                 (BossPhase != ChargePhase.Telegraph && BossPhase != ChargePhase.Charging) ||
                 Hero.State == CombatState.Attack || Hero.State == CombatState.BreakthroughAdvance) return false;
             if (!dodgeChosen)
@@ -428,6 +454,7 @@ namespace EnhancementTower.Combat
                 Pressure = NearbyCount(Hero.Position);
                 BreakthroughCooldown = Math.Max(0, BreakthroughCooldown - Tick);
                 UpdateConstraint();
+                ConsumeGuardRequest();
                 bool bossActing = StepChargeBoss();
                 Step(Hero);
                 for (int i = 0; i < enemies.Count; i++)
@@ -812,6 +839,11 @@ namespace EnhancementTower.Combat
             int beforeHealth = target.Health;
             int damage = attacker.DamageRules.Resolve(attacker.Damage, actionScale, target.Defense,
                 DamageRoll(), DamageRoll(), out bool critical);
+            if (ManualBossDefense && GuardActive && attacker == ChargeBoss && target == Hero)
+            {
+                damage = Math.Max(1, (int)Math.Ceiling(damage * 0.3));
+                GuardedHits++;
+            }
             target.Health = Math.Max(0, target.Health - damage);
             target.RecordDamage(beforeHealth - target.Health, critical);
             target.LastHitKind = attacker.CurrentAttack.Kind;

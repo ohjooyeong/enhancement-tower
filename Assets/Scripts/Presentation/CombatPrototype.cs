@@ -230,6 +230,7 @@ namespace EnhancementTower.Presentation
             feedback.BeginFrame(simulation.Hero);
             feedback.UpdateActor(heroView.Feedback, simulation.Hero, true, Time.unscaledDeltaTime);
             Draw(heroView, simulation.Hero, false);
+            if (simulation.GuardActive) heroView.Body.color = new Color(0.4f, 1, 0.85f);
             DrawAttackArea();
             for (int i = 0; i < simulation.Monsters.Count; i++)
             {
@@ -319,6 +320,17 @@ namespace EnhancementTower.Presentation
             GUI.Label(new Rect(12, 40, 400, 30), $"Enemies {simulation.LivingMonsters}/{simulation.Monsters.Count} | Swing hits: {simulation.Hero.LastHitCount}");
             if (GUI.Button(new Rect(160, 558, 140, 32), "Charge boss"))
             { bossMode = true; stageMode = trapTest = wallTest = false; Restart(); }
+            if (bossMode && simulation.Hero.Alive && simulation.Monster.Alive)
+            {
+                float width = Mathf.Min(280, Screen.width - 24);
+                bool ready = simulation.GuardSecondsRemaining <= 0;
+                GUI.enabled = ready;
+                string label = simulation.GuardActive ? "FOCUS GUARD — ACTIVE" : ready ? "FOCUS GUARD" : $"GUARD {simulation.GuardSecondsRemaining:F1}s";
+                if (GUI.Button(new Rect(Screen.width - width - 12, Screen.height - 110, width, 64), label))
+                    simulation.RequestBossGuard();
+                GUI.enabled = true;
+                GUI.Label(new Rect(12, Screen.height - 40, Screen.width - 24, 28), "Time your guard. Boss attacks are not auto-dodged.");
+            }
             if (bossMode) GUI.Label(new Rect(12, 594, 500, 30), $"Boss: {simulation.BossPhase} | Charge {simulation.Charges} / Sweep {simulation.BossSweeps} {(simulation.BossEnraged ? "ENRAGED" : "")}");
             if (GUI.Button(new Rect(12, 558, 140, 32), "Stage run"))
             { bossMode = false; stageMode = true; trapTest = wallTest = false; Restart(); }
