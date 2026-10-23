@@ -24,7 +24,7 @@
 2. `AGENTS.md`, `INDEX.md`, `25_DECISION_REGISTER.md`, `23_COMBAT_PRESENTATION_2026_10.md` 읽기.
 3. `Assets/Scenes/CombatPrototype.unity`에 placeholder 1 Player + 1 Monster 구현.
 4. 타겟→접근→4방향 시선→타격/피격/사망 검증.
-5. 동작별 다중 베기/찌르기 콤보→군집(5/8/12)→보스 직선 돌진+측면 회피 테스트.
+5. 동작별 다중 베기/찌르기 콤보→군집(5/8/12)→보스 직선 돌진+수동 집중 방어·재교전 테스트(자동 측면 회피는 과거 비교 옵션).
 
 **Do not claim the GDD numbers are final.**
 
@@ -40,3 +40,9 @@
 
 ## Current boss direction (2026-10-23)
 보스는 자동 접근·공격 + 제한적 수동 집중 방어로 검증한다. 기본 돌진 자동 회피는 해제하며, 일반전/파밍은 자동 유지. 세계관 근거는01의 동조/의식적 집중, 최신 승인 내용은25, 실행 방법은26을 따른다.
+
+## Current visual goal (2026-10-23 사용자 승인)
+
+> 약 4등신 캐릭터와 입체감 있는 쿼터뷰 환경으로 구성한 2.5D풍 픽셀 아트 RPG. 레인 없는 전방 중심 자유 자동전투를 사용하며 카메라 방향은 고정한다.
+
+렌더링 기술은 미확정이다. [28_VISUAL_DIRECTION_AND_VIEW_REVIEW.md](28_VISUAL_DIRECTION_AND_VIEW_REVIEW.md)에 문서 충돌, 현재 Assets/View 구조, 기술 비교와 승인 후 검증 항목을 정리했다. [27_FIRST_ASCENT_STORYBOOK.md](27_FIRST_ASCENT_STORYBOOK.md)는 저장소에 추가된 초반 서사/UX **제안**이며, 등장 동기·NPC·장면 전체를 승인된 구현으로 간주하지 않는다. 그 문서의 이전 `2D 수제 도트` 표현도 최신25의 시각적 목표를 따른다.

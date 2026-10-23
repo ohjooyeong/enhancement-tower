@@ -13,15 +13,15 @@ Build a playable, mobile-first Unity 6 / C# idle action RPG **강화의 탑**. W
 ## 2. Locked gameplay direction
 - **No fixed lanes.** In tower combat player movement is autonomous in a bounded 2D field; enemies mostly emerge from the visual forward/top. No manual joystick in the tower. Bosses retain automatic movement/attacks but allow limited manual defensive input (2026-10-23 user-approved); do not automatically solve major boss attacks.
 - **Same movement and camera architecture in standard fights and bosses**. Bosses only add telegraphed attacks, charge, sidesteps, turn/reacquire, and recovery. They may end up behind the hero; no forced position swap or teleport.
-- Camera is fixed **orientation**, angled-looking 2D pixel-art (quarter-view), no camera rotation; position may follow gently/scroll by segments. The player can show front/back/side sprites according to facing; not back-view-only.
+- Camera has fixed **orientation** in quarter-view, no gameplay camera rotation; position may follow gently/scroll by segments. Rendering technique, initial fixed angle and projection remain undecided. The player can show front/back/side sprites according to facing; not back-view-only.
 - Regular attacks use per-action geometry: forward slashes directly hit up to 3 nearest eligible enemies with equal base damage; narrow forward thrust hits 1 harder. No primary-target + reduced splash or random victim selection. Each enemy is hit once per action, with a total target budget across the active window. The prototype slash → reverse slash → thrust order and numerical values remain tunable; conditional breakthrough slash may push nearby enemies then advance only into physically open space after sustained blocking; **not** mandatory combo movement, phasing, or guaranteed escape. Tactical movement and focus targeting sample eligible candidates with seeded score-weighted probabilities; favour better choices while permitting lower-ranked legal ones. Distance is bounded, and attack windows/victim geometry stay deterministic given inputs. Do not alternate sides or reroll every frame.
 - Aim and movement vectors are distinct. Hit detection is derived from logic and attack arcs, not VFX appearance or animation frames. Combat simulation is framerate independent.
 - Monsters accumulate if kill rate < spawn pressure; limited lateral reposition and hard retreat limit; no infinite kiting. Player and monsters must not overlap at foot-center; limited monster-monster overlap allowed. No guaranteed perfect auto-dodge.
-- Normal ranged projectiles generally handled by build/defense; clearly telegraphed boss or elite AoE permits limited geometry-based sidestep. Avoid impossible/unreadable patterns.
+- Normal ranged projectiles generally handled by build/defense; elite AoE may permit limited geometry-based sidestep. Boss major attacks default to manual Focus Guard, not automatic charge avoidance. Avoid impossible/unreadable patterns.
 - Challenge: finite stage (v0 ~50 enemy kills, ~5 concurrent baseline, ~90 sec test), no Rage. Clear→next; fail twice→appropriate Farming.
 - Farming: persistent spawns, no per-wave intro, repeatable forward illusion/segments, offline settlement, optional encounter-intro toggle; Rage is manual and **Farming-only**.
 - Hub navigation may be manual; tower combat is autonomous.
-- Visual style: restrained modern handcrafted 2D pixel art; no shiny generic dark-fantasy UI, character EXP/level, or leveled skills in MVP.
+- Visual goal (2026-10-23 user-approved): **약 4등신 캐릭터와 입체감 있는 쿼터뷰 환경으로 구성한 2.5D풍 픽셀 아트 RPG. 레인 없는 전방 중심 자유 자동전투를 사용하며 카메라 방향은 고정한다.** Modern handcrafted pixel art; rendering technology remains undecided (see `docs/28_VISUAL_DIRECTION_AND_VIEW_REVIEW.md`). No final art, full renderer migration or combat rewrite before separate approval; no shiny generic dark-fantasy UI, character EXP/level, or leveled skills in MVP.
 
 ## 3. Equipment & progression invariants
 - Slots: 1 weapon, 1 armor, 2 rings, 1 orb, 1 auto skill. Rage separate.
@@ -31,10 +31,10 @@ Build a playable, mobile-first Unity 6 / C# idle action RPG **강화의 탑**. W
 - Equipment inventory/economy RNG and rewards must eventually be server authoritative; **do not build backend in prototype phase**.
 
 ## 4. Unity implementation rules
-- Target a Unity 6 version pinned in `ProjectSettings/ProjectVersion.txt`, same exact version across Mac and Windows. 2D URP/Universal 2D if available in selected editor.
+- Target a Unity 6 version pinned in `ProjectSettings/ProjectVersion.txt`, same exact version across Mac and Windows. Current prototype uses URP/Universal 2D. This is an implementation fact, not a locked final renderer. Review alternatives before changing the pipeline.
 - Organize `Assets/Scripts` into `Core`, `Combat`, `AI`, `Progression`, `Data`, `Presentation`, `UI`, `Infrastructure`; `Assets/Scenes`, `Assets/Prefabs`, `Assets/Art`, `Assets/Tests`.
 - Use plain C# domain models for combat/balance; MonoBehaviour for composition/Unity-specific views; ScriptableObject for authored static definitions. Never mutate ScriptableObject definitions to store run/save state.
-- AI state machine baseline `SEARCH → APPROACH → ATTACK → REPOSITION → SEARCH`; boss add `AVOID_TELEGRAPH → REACQUIRE`, not a second incompatible movement system.
+- AI state machine baseline `SEARCH → APPROACH → ATTACK → REPOSITION → SEARCH`; boss extends shared movement with telegraph/charge/reacquire/sweep and manual Focus Guard. `AVOID_TELEGRAPH` is a legacy comparison option, not the default boss response.
 - Treat `CombatClock`, `AttackResolver`, `HitResolver`, `TargetSelector`, `MovementController`, `SpawnDirector`, `CombatPresentation` as separable responsibilities; names are suggestions, not an obligation to generate classes without need.
 - Use object pooling only where profiling justifies it; avoid `FindObjectOfType`/scene-wide searches or allocations in hot loops; use deterministic simulated time and seeded randomness when testing.
 - Keep sprite facing/depth sorting and collider foot positions explicit; visual VFX never defines combat ranges.
@@ -62,7 +62,7 @@ Build a playable, mobile-first Unity 6 / C# idle action RPG **강화의 탑**. W
 - `CombatPrototype` scene with placeholder sprites, fixed-angle camera, one hero, one melee monster.
 - Target/approach, facing 4 dirs, attack timing, front diagonal slash and damage, hit reactions, death.
 - Validate forward multi-target slash / reverse slash / single-target thrust, then 5→8→12 enemies stress test and overlap/retreat-limit behavior.
-- Add one boss: telegraphed linear charge, lateral dodge, boss passes hero, hero rotates and re-engages.
+- Add one boss: telegraphed linear charge, manual Focus Guard, collision-safe movement and turn/re-engage when positions naturally cross. Preserve the legacy sidestep comparison without restoring it as default.
 - Add basic stage spawn/clear, minimal HUD, encounter intro skip toggle.
 - Validate at portrait phone aspect ratios and performance before adding permanent progression.
 

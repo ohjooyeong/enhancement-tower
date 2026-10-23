@@ -1,5 +1,18 @@
 # Decision register (current, 2026-10-22)
 
+## 2026-10-23 USER-APPROVED visual goal — current
+
+> 약 4등신 캐릭터와 입체감 있는 쿼터뷰 환경으로 구성한 2.5D풍 픽셀 아트 RPG. 레인 없는 전방 중심 자유 자동전투를 사용하며 카메라 방향은 고정한다.
+
+- 확정 대상은 **시각적 목표**다. 현대적인 수제 도트, 약4등신 인물, 바닥·벽·기둥·그림자·전후 가림으로 깊이와 높낮이가 읽히는 공간을 지향한다. 평평한 도형 화면은 현재 검증용 View이며 최종 목표가 아니다.
+- **렌더링 기술 선택은 미확정**이다. 2D 스프라이트/레이어 기반, 2D 캐릭터+3D 환경, 3D 기반 픽셀 표현 중 어느 것도 이번 승인으로 채택하지 않는다. 현재 Universal2D 설정은 구현 현황이며 영구 기술 제약이 아니다.
+- 카메라는 플레이 도중 방향/기울기를 회전시키지 않는다. 고정된 초기 각도, 투영 방식, 논리 좌표의 View 투영과 PPU/기준 해상도는 후속 비교에서 결정한다. 일반전/보스는 같은 카메라·이동 구조를 쓴다.
+- 기존 순수 C# 고정 틱 전투, 레인 없는 자유 자동 이동, 밀집/발 중심 충돌/넉백, 보스 돌진·재교전과 **수동 집중 방어**를 유지한다. 자동 돌진 회피를 기본으로 복구하지 않는다.
+- 높낮이는 우선 시각적 표현이다. 실제 경사 이동/다층 충돌/고저차 피해·사거리/점프는 승인된 전투 기능이 아니다. View의 높이로 전투 좌표를 바꾸지 않는다.
+- 아래의 초기 `2D handcrafted pixel-art` 표현은 이전 명칭이다. 최신 목표는 위 문장으로 통일하며, 과거2D 표현을 평면 아트 또는 2D 렌더러만 허용하는 결정으로 해석하지 않는다. 기존 결정 이력은 보존한다.
+- 기술 검토와 문서 충돌 목록: [28_VISUAL_DIRECTION_AND_VIEW_REVIEW.md](28_VISUAL_DIRECTION_AND_VIEW_REVIEW.md). 최종 아트/전체 렌더링 전환/전투 코드 재작성은 별도 승인 전 진행하지 않는다.
+
+
 ## LOCKED DIRECTION (design-level; prototype validation still required)
 - Portrait-mobile-first 2D handcrafted pixel-art, forward-looking quarter-view, camera orientation static (position can track modestly).
 - Lane-free autonomous movement in bounded area; primary monster arrival from ahead, not omnidirectional bullet-hell. Neither tower game mode has manual player movement. Boss encounters allow the explicit defensive input approved on 2026-10-23.

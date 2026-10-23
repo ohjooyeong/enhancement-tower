@@ -1,5 +1,12 @@
 # EnhancementTower — Unity 개발 시작 팩 (2026-10-21)
 
+## 현재 시각적 목표 (2026-10-23)
+
+> 약 4등신 캐릭터와 입체감 있는 쿼터뷰 환경으로 구성한 2.5D풍 픽셀 아트 RPG. 레인 없는 전방 중심 자유 자동전투를 사용하며 카메라 방향은 고정한다.
+
+렌더링 기술은 미확정입니다. 현재 도형 기반 View/Universal2D 설정을 최종 아트로 간주하지 않습니다. [View 검토](docs/28_VISUAL_DIRECTION_AND_VIEW_REVIEW.md)에 충돌 정리, 구현 방식 비교와 승인 후 검증 범위를 기록했습니다. 보스는 자동 접근·공격 + 수동 집중 방어이며 자동 돌진 회피는 기본 해제입니다. 아래 착수 프롬프트/설치 안내는 개발 시작 당시 기록입니다.
+
+
 - `AGENTS.md`: Codex / coding agent instructions (Unity project root에 배치)
 - `docs/INDEX.md`: 전체 문서 구조 및 우선순위
 - `docs/25_DECISION_REGISTER.md`: 최신 결정과 미확정 구분

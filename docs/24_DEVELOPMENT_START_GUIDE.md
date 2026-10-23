@@ -1,5 +1,7 @@
 # Development Start Guide
 
+> 초기 설치 기록이다. 현재 정확한 Editor는 `ProjectSettings/ProjectVersion.txt`(6000.6.4f1)를 따른다. Universal2D는 현재 프로토타입 설정이며 최종 렌더링 기술 확정이 아니다. 2026-10-23 비주얼 목표/기술 검토는 `25_DECISION_REGISTER.md` / `28_VISUAL_DIRECTION_AND_VIEW_REVIEW.md` 참조.
+
 목표:
 > 오늘 개발 환경을 설치하고 `EnhancementTower` 프로젝트를 열어 빈 Scene을 Play하는 것까지 완료한다.
 
