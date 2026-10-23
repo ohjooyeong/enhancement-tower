@@ -116,4 +116,36 @@ public class EquipmentTests
         Assert.Throws<ArgumentException>(() => new EquipmentSession(new[] { spec, spec }, new EnhancementPolicy()));
         Assert.Throws<ArgumentOutOfRangeException>(() => new EnhancementPolicy(baseChance: double.NaN));
     }
+    [Test]
+    public void JourneyUnlocksInOrderAndSettlesEachAttemptOnlyOnce()
+    {
+        var route = new PrototypeJourney();
+        Assert.AreEqual(JourneyScreen.Camp, route.Screen);
+        Assert.IsTrue(route.CanEnter(0)); Assert.IsFalse(route.CanEnter(1));
+        Assert.IsTrue(route.CanEnter(PrototypeJourney.SupplyIndex));
+        Assert.Throws<InvalidOperationException>(() => route.Begin(3));
+        route.Begin(0); Assert.IsTrue(route.Active);
+        Assert.IsTrue(route.Complete(false)); Assert.AreEqual(1, route.Unlocked);
+        Assert.IsFalse(route.Complete(true)); Assert.AreEqual(1, route.Unlocked);
+        route.Begin(0); Assert.IsTrue(route.Complete(true)); Assert.AreEqual(2, route.Unlocked);
+        Assert.IsFalse(route.Complete(true)); Assert.AreEqual(JourneyScreen.Result, route.Screen);
+        route.Begin(PrototypeJourney.SupplyIndex); route.Complete(true); Assert.AreEqual(2, route.Unlocked);
+        route.Begin(1); route.Complete(true); route.Begin(2); route.Complete(true);
+        Assert.AreEqual(4, route.Unlocked); route.Begin(3); route.Complete(true);
+        Assert.AreEqual(4, route.Unlocked);
+    }
+    [Test]
+    public void JourneyNavigationPausesWithoutSettlingOrApplyingRewards()
+    {
+        var route = new PrototypeJourney();
+        Assert.Throws<InvalidOperationException>(() => route.Navigate(JourneyScreen.Combat));
+        Assert.Throws<InvalidOperationException>(() => route.Navigate(JourneyScreen.Result));
+        route.Begin(0); route.Navigate(JourneyScreen.Camp); route.Navigate(JourneyScreen.Stages);
+        Assert.IsTrue(route.Active); Assert.AreEqual(1, route.Attempts);
+        route.Navigate(JourneyScreen.Combat); Assert.IsTrue(route.Active);
+        route.Begin(PrototypeJourney.SupplyIndex); Assert.AreEqual(2, route.Attempts);
+        Assert.AreEqual(1, route.Unlocked); route.Complete(true); Assert.AreEqual(1, route.Unlocked);
+        Assert.IsFalse(route.CanEnter(-1)); Assert.IsFalse(route.CanEnter(5));
+    }
+
 }

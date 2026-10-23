@@ -143,4 +143,26 @@ public static class CombatPrototypeSceneBuilder
             AssetDatabase.CreateAsset(ScriptableObject.CreateInstance<EnhancementTower.Data.StageDefinition>(), stagePath);
         AssetDatabase.SaveAssets();
     }
+    [MenuItem("Enhancement Tower/Create Journey Prototype Scene")]
+    public static void CreateJourneyPrototype()
+    {
+        const string path = "Assets/Scenes/JourneyPrototype.unity";
+        if (AssetDatabase.LoadAssetAtPath<SceneAsset>(path) != null)
+        { EditorSceneManager.OpenScene(path); return; }
+        if (AssetDatabase.LoadAssetAtPath<SceneAsset>("Assets/Scenes/EquipmentPrototype.unity") == null)
+            CreateEquipmentPrototype();
+        AssetDatabase.SaveAssets();
+        var scene = EditorSceneManager.OpenScene("Assets/Scenes/EquipmentPrototype.unity");
+        CombatPrototype prototype = null;
+        foreach (GameObject root in scene.GetRootGameObjects())
+        { prototype = root.GetComponentInChildren<CombatPrototype>(); if (prototype != null) break; }
+        if (prototype == null) throw new System.InvalidOperationException("Equipment scene has no combat prototype.");
+        var serialized = new SerializedObject(prototype);
+        serialized.FindProperty("enableJourneyPrototype").boolValue = true;
+        serialized.ApplyModifiedPropertiesWithoutUndo();
+        EditorSceneManager.SaveScene(scene, path, true);
+        EditorSceneManager.OpenScene(path);
+        Debug.Log("Journey prototype created; original scenes preserved.");
+    }
+
 }

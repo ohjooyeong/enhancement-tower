@@ -82,3 +82,6 @@ The user separately authorized weapon/armor equip + enhancement + real combat st
 
 ## 10. Ratio defense (2026-10-23 user-approved)
 Use shared ratio mitigation `max(1, round(raw * K / (K + target DEF)))` after existing raw action/critical rounding; midpoint away from zero. Replace flat subtraction in all combat, preserving seeded rolls and manual Focus Guard afterward. Configurable finite positive K defaults to20 as a prototype assumption, not final balance. Do not assume diminishing reduction percentages imply diminishing absolute effective-health gains. Potion/monster attack/armor growth balance remains separate; do not restore flat subtraction. See docs/04_COMBAT.md and docs/30_EQUIPMENT_ENHANCEMENT_PROTOTYPE.md.
+
+## 11. Journey UI slice (2026-10-23 user-approved)
+A separate JourneyPrototype scene connects uGUI camp/equip/enhance feedback, four staged encounters, result/retry and finite supply combat. See docs/31_JOURNEY_PLAY_FLOW.md. Preserve original scenes, ratio defense K20 and manual boss Focus Guard. Screens switch within one scene; paused combat resumes with its original stats, new entry resets the fight and snapshots gear. Rewards settle only once on clear. Route/reward values are prototype assumptions. No automatic ascent, potion, manual dodge, new patterns, persistence/backend or full Farming in this slice.

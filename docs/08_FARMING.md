@@ -36,3 +36,6 @@ Reward = ExpectedFarmingRate × ElapsedTime × OfflineEfficiency
 ```
 
 실제 몬스터 이동과 타격을 재생하지 않는다.
+
+## 현재 플레이 흐름과의 구분
+[31](31_JOURNEY_PLAY_FLOW.md)의 Supply Run은4마리 유한 재료 보충 비교 전투다. 위 지속 스폰/자동 재시도·추천 지역/오프라인 정산/Rage 구현 완료로 해석하지 않는다.

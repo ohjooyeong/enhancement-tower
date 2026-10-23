@@ -7,7 +7,7 @@ using UnityEngine.Rendering.Universal;
 
 namespace EnhancementTower.Presentation
 {
-    public sealed class CombatPrototype : MonoBehaviour
+    public sealed partial class CombatPrototype : MonoBehaviour
     {
         [SerializeField, Min(1)] private int heroHealth = 240, monsterHealth = 60;
         [SerializeField, Min(1)] private int heroDamage = 12, monsterDamage = 6;
@@ -118,6 +118,7 @@ namespace EnhancementTower.Presentation
                 workshopOpen = true;
             }
             Restart();
+            if (enableJourneyPrototype) InitializeJourney();
         }
         private void ConfigureView()
         {
@@ -160,7 +161,8 @@ namespace EnhancementTower.Presentation
             stage = null;
             materialRun = materialRun && !bossMode && !stageMode && !wallTest && !trapTest;
             bool finite = stageMode && !bossMode && !wallTest && !trapTest;
-            StageSettings stageSettings = finite ? (stageDefinition != null ? stageDefinition.Snapshot() : new StageSettings()) : null;
+            JourneyStage route = journey != null ? journey.Stage(journey.Current) : null;
+            StageSettings stageSettings = finite ? (route != null ? new StageSettings(route.Total, route.Initial, route.MaxAlive, route.Interval, route.Seconds) : stageDefinition != null ? stageDefinition.Snapshot() : new StageSettings()) : null;
             int count = materialRun ? 1 : bossMode ? 1 : finite ? stageSettings.Total : trapTest ? 8 : wallTest ? 3 : Mathf.Clamp(monsterCount, 1, 12);
             Vector2 playerStart = trapTest ? new Vector2(0, -1.5f) : wallTest ? new Vector2(-2, -2) : heroStart;
             monsterViews = new ActorView[count]; monsterKinds = new PrototypeMonsterKind[count];
@@ -170,7 +172,8 @@ namespace EnhancementTower.Presentation
             DamageProfile heroRules = damageDefinition != null ? damageDefinition.Snapshot(true) : new DamageProfile(0.85f, 1.15f, 0.15f);
             DamageProfile enemyRules = damageDefinition != null ? damageDefinition.Snapshot(false) : new DamageProfile(0.85f, 1.15f, 0.05f);
             bool mixed = !materialRun && tacticsDefinition != null && tacticsDefinition.mixedThreats, includeFast = includeFastMonsters;
-            int baseHealth = monsterHealth, baseDamage = monsterDamage;
+            int baseHealth = route != null ? Mathf.Max(1, Mathf.RoundToInt(monsterHealth * route.HealthScale)) : monsterHealth;
+            int baseDamage = route != null ? Mathf.Max(1, Mathf.RoundToInt(monsterDamage * route.DamageScale)) : monsterDamage;
             int normalDefense = damageDefinition != null ? damageDefinition.monsterDefense : 0;
             int heavyDefense = damageDefinition != null ? damageDefinition.strongMonsterDefense : 3;
             float heavyThreat = tacticsDefinition != null ? tacticsDefinition.strongEnemyThreat : 1.8f;
@@ -183,7 +186,7 @@ namespace EnhancementTower.Presentation
                     return new Fighter(position, bossHealth, Mathf.Max(1, Mathf.RoundToInt(baseDamage * 1.6f)), 1.55f, 0.85f, 0.32f, 0.48f,
                         defense: heavyDefense, damageProfile: enemyRules);
                 }
-                PrototypeMonsterKind kind = monsterKinds[index] = FastMonsterSettings.KindAt(index, mixed, includeFast);
+                PrototypeMonsterKind kind = monsterKinds[index] = route != null ? (route.Roster == JourneyRoster.Heavy ? PrototypeMonsterKind.Heavy : route.Roster == JourneyRoster.Fast && index % 3 != 0 ? PrototypeMonsterKind.Fast : PrototypeMonsterKind.Normal) : FastMonsterSettings.KindAt(index, mixed, includeFast);
                 bool strong = kind == PrototypeMonsterKind.Heavy;
                 if (kind == PrototypeMonsterKind.Fast)
                 { fastCount++; return fast.Create(position, baseHealth, baseDamage, normalDefense, enemyRules, trap ? 120 : 1); }
@@ -263,13 +266,20 @@ namespace EnhancementTower.Presentation
         private void Update()
         {
             if (simulation == null) return;
+            if (journey != null) UpdateJourney();
             if (!workshopOpen)
             {
                 if (stage != null) stage.Advance(Time.deltaTime);
-                else if (equipment == null || simulation.Hero.Alive && simulation.LivingMonsters > 0) simulation.Advance(Time.deltaTime);
+                else if (equipment == null || simulation.Hero.Alive && simulation.LivingMonsters > 0)
+                {
+                    double seconds = Time.deltaTime;
+                    if (journey != null) seconds = System.Math.Min(seconds, System.Math.Max(0, (journey.Stage(journey.Current).Seconds * 60 - simulation.Ticks) * (double)CombatSimulation.Tick));
+                    simulation.Advance(seconds);
+                }
             }
-            if (equipment != null && materialRun && simulation.Hero.Alive && simulation.LivingMonsters == 0)
+            if (journey == null && equipment != null && materialRun && simulation.Hero.Alive && simulation.LivingMonsters == 0)
                 if (equipment.RewardMaterialRun(equipmentRun)) enhancementMessage = "Material test clear: +40 Gold / +3 Stones (prototype reward).";
+            if (journey != null) SettleJourney();
             SyncMonsterViews();
             // Preserve the entire field on narrow portrait displays, with a fixed orientation.
             chargeWarning.enabled = bossMode && simulation.Hero.Alive && simulation.Monster.Alive &&
@@ -397,6 +407,15 @@ namespace EnhancementTower.Presentation
         private void OnGUI()
         {
             if (simulation == null) return;
+            if (journey != null)
+            {
+                if (journey.Screen == JourneyScreen.Combat)
+                {
+                    feedback.DrawNumber(heroView.Feedback, viewCamera);
+                    for (int i = 0; i < simulation.Monsters.Count; i++) feedback.DrawNumber(monsterViews[i].Feedback, viewCamera);
+                }
+                return;
+            }
             if (enableViewComparison) { DrawComparisonHUD(); return; }
             feedback.DrawNumber(heroView.Feedback, viewCamera);
             for (int i = 0; i < simulation.Monsters.Count; i++) feedback.DrawNumber(monsterViews[i].Feedback, viewCamera);
@@ -525,6 +544,6 @@ namespace EnhancementTower.Presentation
             if (GUI.Button(new Rect(20, height - 60, width - 40, 36), "Material test (1 foe): earn 40G / 3 stones"))
             { materialRun = true; bossMode = stageMode = wallTest = trapTest = false; workshopOpen = false; Restart(); }
         }
-        private void OnDestroy() { quarterStage?.Dispose(); feedback?.Dispose(); if (square != null) Destroy(square); if (texture != null) Destroy(texture); }
+        private void OnDestroy() { DisposeJourney(); quarterStage?.Dispose(); feedback?.Dispose(); if (square != null) Destroy(square); if (texture != null) Destroy(texture); }
     }
 }

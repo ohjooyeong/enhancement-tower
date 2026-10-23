@@ -60,3 +60,6 @@
 
 ## Milestone 2: equipment / enhancement
 [30_EQUIPMENT_ENHANCEMENT_PROTOTYPE.md](30_EQUIPMENT_ENHANCEMENT_PROTOTYPE.md): 무기·방어구/강화 상태·장착 스탯 합산·강화 시도·고정 시드 전후 비교와 재료 테스트 전투. `EquipmentPrototype` 씬의 세션 최소 기능이며 저장/서버·정식 Farming·레벨·스킬2슬롯은 별도다. 최종 경제 수치를 확정하지 않는다.
+
+## 캠프·강화·스테이지 흐름
+[31_JOURNEY_PLAY_FLOW.md](31_JOURNEY_PLAY_FLOW.md): 별도 JourneyPrototype 씬의 uGUI 캠프/강화→4개 순차 해금 스테이지→결과/재도전 및 유한 재료 보충. 화면 전환은 한 씬 안에서 처리하며 세션 저장/정식 자동 등반·Farming·자동 포션·수동 회피는 별도다.

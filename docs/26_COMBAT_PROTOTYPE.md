@@ -238,3 +238,6 @@
 - `Assets/Data/CombatDamage`의 **Defense Constant**로 공유 K를 조절한다. 초기20은 최종 수치가 아니다. 정의는 시작/Restart의 불변 DamageProfile에 스냅샷하며 에셋에 실행 상태를 쓰지 않는다. 집중 방어는 최종 피해 추가 경감 순서를 유지한다.
 - 공격력/장비 증가량/씬/자동 포션은 변경하지 않았다. 공식의 의미/한계는 [04](04_COMBAT.md), 철갑옷 전후 수치와 Unity 수동 절차는 [30](30_EQUIPMENT_ENHANCEMENT_PROTOTYPE.md)를 따른다. 이전 테스트 수와 피해 예시는 과거 검증 기록으로 보존한다.
 - 최신 검증: Unity6000.6.4f1 EditMode98/98 통과 및 Metal Play 상태에서 정의 K 스냅샷/장비·재료 흐름 검증 완료. 실제 GUI·터치/모바일·Windows·포션 균형은 미검증. 상세 결과는 [30](30_EQUIPMENT_ENHANCEMENT_PROTOTYPE.md)의 비율 방어 변경 검증 결과 참조.
+
+## 캠프·강화·스테이지 플레이 흐름
+사용자 승인 후 JourneyPrototype 별도 씬에서 uGUI 캠프/강화→순차 해금4스테이지→결과·재도전 및 유한 보충 전투를 연결했다. 기존 비교 씬과 순수 전투 계산/보스 집중 방어·K20 방어 공식은 유지한다. 구현/수치·테스트와 Unity 절차는 [31](31_JOURNEY_PLAY_FLOW.md) 참조.

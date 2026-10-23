@@ -105,3 +105,8 @@
 - Configurable shared `CombatDamageDefinition.defenseConstant` is finite and positive. Initial **K20** is a comparison assumption, not final balance. No extra reduction cap is introduced; rounding/minimum1 still matter at tiny damage or extreme DEF.
 - Diminishing gains in reduction percentage do not imply diminishing absolute effective-health gains: ignoring integer effects, fixed HP has effective health `HP * (1 + DEF/K)`. Armor HP bonuses and healing still require joint balance.
 - Do not raise monster attack stats or implement automatic potions in this change. Future potion amount/interval and post-defense incoming DPS must be balanced together. No level/quest/skill, movement, boss-auto-dodge or renderer scope is added. Current formula and checks: [04](04_COMBAT.md), [30](30_EQUIPMENT_ENHANCEMENT_PROTOTYPE.md).
+
+## 2026-10-23 USER-APPROVED playable journey UI
+- User authorized clearer workshop/enhancement feedback, multiple stages and screen transitions to assess the growth loop. A separate opt-in JourneyPrototype scene uses uGUI camp → stage selection → combat → result/retry, with4 sequential unlocks and a repeatable finite supply encounter.
+- Pause/resume keeps current Fighter stats; starting a new encounter applies equipment and resets HP/time. Clear-only prototype rewards settle once per run. Boss entry stays manual and uses existing Focus Guard.
+- Route counts/multipliers/rewards and .65s presentation lock are configurable-in-code comparison assumptions, not final balance. Preserve ratio defense K20, original scenes/user edits and all old validation history. No potion/manual dodge/new boss patterns/backend/save/full Farming or automatic ascent in this slice. See [31](31_JOURNEY_PLAY_FLOW.md).
