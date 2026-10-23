@@ -17,6 +17,7 @@ MonoBehaviour:
   heroCriticalChance: 0.15
   monsterCriticalChance: 0.05
   criticalMultiplier: 1.5
+  defenseConstant: 20
   heroDefense: 1
   monsterDefense: 0
   strongMonsterDefense: 3

@@ -89,6 +89,25 @@ public class EquipmentTests
         Assert.AreEqual(14, before.Hero.Damage); Assert.AreEqual(540, before.Hero.MaxHealth);
     }
     [Test]
+    public void ArmorFourStillTakesMeaningfulNormalHitsAndImprovesRealSurvival()
+    {
+        var s = Session(); s.Equip(2);
+        var before = Battle(s.Stats(500, 10, 1));
+        for (int i = 0; i < 4; i++) s.Enhance(2, 0, .9);
+        var stats = s.Stats(500, 10, 1);
+        Assert.AreEqual(6, stats.Defense);
+        var rules = new DamageProfile(.85f, 1.15f);
+        Assert.AreEqual(4, rules.Resolve(6, 1, stats.Defense, 0, .9, out _));
+        Assert.AreEqual(5, rules.Resolve(6, 1, stats.Defense, .999, .9, out _));
+        var after = Battle(stats);
+        before.Advance(4); after.Advance(4);
+        Assert.AreEqual(after.Monster.HitsTaken, before.Monster.HitsTaken);
+        Assert.AreEqual(after.Hero.HitsTaken, before.Hero.HitsTaken);
+        Assert.AreEqual(after.Monster.DamageTaken, before.Monster.DamageTaken);
+        Assert.Less(after.Hero.DamageTaken, before.Hero.DamageTaken);
+        Assert.Greater(after.Hero.Health, before.Hero.Health);
+    }
+    [Test]
     public void DefinitionsRejectAmbiguousSlotsAndDuplicateIds()
     {
         Assert.Throws<ArgumentException>(() => new EquipmentSpec("bad", "Bad", (EquipmentSlot)99, 1, 1));

@@ -79,3 +79,6 @@ This change authorizes Markdown updates only. Do not implement level/EXP calcula
 
 ## 9. Milestone 2 equipment scope (2026-10-23)
 The user separately authorized weapon/armor equip + enhancement + real combat stat comparison. See `docs/30_EQUIPMENT_ENHANCEMENT_PROTOTYPE.md`. Use static definitions and separate session state, configurable prototype numbers and no backend. The preceding documentation-only restriction was for level/quest/skill design; those systems remain outside this equipment task. Preserve existing scenes/user settings, combat rules and manual boss Focus Guard. Do not treat the finite material test as implemented persistent Farming or local RNG as final economy authority.
+
+## 10. Ratio defense (2026-10-23 user-approved)
+Use shared ratio mitigation `max(1, round(raw * K / (K + target DEF)))` after existing raw action/critical rounding; midpoint away from zero. Replace flat subtraction in all combat, preserving seeded rolls and manual Focus Guard afterward. Configurable finite positive K defaults to20 as a prototype assumption, not final balance. Do not assume diminishing reduction percentages imply diminishing absolute effective-health gains. Potion/monster attack/armor growth balance remains separate; do not restore flat subtraction. See docs/04_COMBAT.md and docs/30_EQUIPMENT_ENHANCEMENT_PROTOTYPE.md.

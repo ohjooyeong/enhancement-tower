@@ -1059,9 +1059,9 @@ public class CombatSimulationTests
     {
         var rules = new DamageProfile(0.85f, 1.15f, 0.15f, 1.5f);
         Assert.AreEqual(10, rules.Minimum(12)); Assert.AreEqual(14, rules.Maximum(12));
-        Assert.AreEqual(7, rules.Resolve(12, 1, 3, 0, 0.9, out bool lowCrit));
-        Assert.AreEqual(11, rules.Resolve(12, 1, 3, 0.999999, 0.9, out _));
-        Assert.AreEqual(35, rules.Resolve(12, 1.8f, 3, 0.999999, 0, out bool highCrit));
+        Assert.AreEqual(9, rules.Resolve(12, 1, 3, 0, 0.9, out bool lowCrit));
+        Assert.AreEqual(12, rules.Resolve(12, 1, 3, 0.999999, 0.9, out _));
+        Assert.AreEqual(33, rules.Resolve(12, 1.8f, 3, 0.999999, 0, out bool highCrit));
         Assert.IsFalse(lowCrit); Assert.IsTrue(highCrit);
         Assert.AreEqual(1, rules.Resolve(12, 1, 999, 0, 0, out _));
     }
@@ -1072,6 +1072,30 @@ public class CombatSimulationTests
         Assert.Throws<System.ArgumentOutOfRangeException>(() => new DamageProfile(criticalChance: float.NaN));
         Assert.Throws<System.ArgumentOutOfRangeException>(() => new DamageProfile(criticalMultiplier: 0.5f));
         Assert.Throws<System.ArgumentOutOfRangeException>(() => new DamageProfile(float.PositiveInfinity));
+    }
+    [Test]
+    public void RatioDefenseHasPredictableScalingAndNeverIncreasesDamage()
+    {
+        var rules = new DamageProfile(defenseConstant: 20);
+        Assert.AreEqual(1000, rules.Resolve(1000, 1, 0, 0, 0, out _));
+        Assert.AreEqual(500, rules.Resolve(1000, 1, 20, 0, 0, out _));
+        Assert.AreEqual(333, rules.Resolve(1000, 1, 40, 0, 0, out _));
+        Assert.AreEqual(250, rules.Resolve(1000, 1, 60, 0, 0, out _));
+        int previous = 1000;
+        for (int defense = 0; defense <= 1000; defense++)
+        {
+            int damage = rules.Resolve(1000, 1, defense, 0, 0, out _);
+            Assert.That(damage, Is.InRange(1, previous)); previous = damage;
+        }
+        Assert.AreEqual(1, rules.Resolve(1, 1, int.MaxValue, 0, 0, out _));
+        Assert.AreEqual(20, rules.Resolve(int.MaxValue, 1, int.MaxValue, 0, 0, out _));
+        Assert.AreEqual(500, new DamageProfile(defenseConstant: 40).Resolve(1000, 1, 40, 0, 0, out _));
+    }
+    [Test]
+    public void DefenseConstantMustBeFiniteAndPositive()
+    {
+        foreach (float invalid in new[] { 0f, -1f, float.NaN, float.PositiveInfinity, float.NegativeInfinity })
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => new DamageProfile(defenseConstant: invalid));
     }
     [Test]
     public void CriticalChanceZeroAndOneHaveExactBoundaries()
@@ -1125,7 +1149,7 @@ public class CombatSimulationTests
         }
         Assert.Greater(results.Count, 5);
         Assert.That(crits, Is.InRange(150, 250));
-        Assert.That(damage / 1000.0, Is.InRange(9.7, 10.8)); // about 12 * 1.1 - 3, with rounding
+        Assert.That(damage / 1000.0, Is.InRange(11.0, 12.0)); // Exact expectation: .8 * mean(9,10,10,11,12) + .2 * mean(13,15,16,17,18) = 11.48
     }
     [Test]
     public void DamageRandomDrawsDoNotChangeTacticalRandomStream()

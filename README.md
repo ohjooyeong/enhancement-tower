@@ -46,3 +46,5 @@ Unity 6000.6.4f1에서 `Assets/Scenes/CombatPrototype.unity`를 열고 Play합�
 
 ## Milestone 2 장비·강화 실행
 `Assets/Scenes/EquipmentPrototype.unity`를 열고 Play하세요. 작업대에서 무기/방어구를 장착·강화한 뒤 **Apply equipment / retry**로 실제 ATK·DEF·최대HP 변화와 전투 결과를 비교합니다. **Equipment / forge**로 돌아가며, 재료가 부족하면 **Material test (1 foe)**로 보충할 수 있습니다. 장비/재료는 Play 중 재도전에 유지되고 Play 종료 후 초기화됩니다. 정식 저장/서버/파밍은 아직 없으며 [30 안내](docs/30_EQUIPMENT_ENHANCEMENT_PROTOTYPE.md)에 조절 값과 수동 검증 방법을 기록했습니다.
+
+방어력은 피해를 직접 빼지 않고 `K/(K+DEF)`로 비율 경감합니다. `Assets/Data/CombatDamage`의 Defense Constant 초기값20은 비교용이며, [방어 공식](docs/04_COMBAT.md)과 [장비 검증 절차](docs/30_EQUIPMENT_ENHANCEMENT_PROTOTYPE.md)를 참고하세요. 몬스터 공격력은 유지했고 자동 회복 포션은 아직 구현하지 않았습니다.
