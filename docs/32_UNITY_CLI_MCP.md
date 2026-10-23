@@ -41,3 +41,20 @@ MCP 프로토콜 검증은 독립 stdio 클라이언트로 수행했다. Cursor/
 - [Unity Pipeline 설치와 Editor 연결](https://docs.unity.com/en-us/unity-cli/unity-pipeline/unity-pipeline-package)
 - 설치된 공식 패키지 `Documentation~/commands/`의 Editor lifecycle, scenes, runtime, build-and-compilation 문서와 실제 명령 카탈로그를 대조했다.
 - [OpenAI Codex MCP 설정](https://developers.openai.com/codex/mcp)
+
+## 2026-10-23 Codex 세션 MCP 실제 호출 및 여정 확인
+
+- 재시작 후 이 Codex 세션에 Unity MCP 도구가 로드됐고 `list_open`, `eval`, Play 시작/정지, 캡처 호출이 실제 성공했다. Cursor 앱 연결은 이번에도 확인하지 않았다. CLI는 샌드박스 안에서 프로젝트를 찾지 못했으나 승인된 외부 실행에서는 Unity6000.6.4f1/대상 프로젝트/ready 상태를 확인했다. CLI는 beta.13을 유지했다.
+- 열린 JourneyPrototype은 시작/종료 모두 `isDirty=false`. Play 중 백그라운드 비활성으로 frameCount가2에 멈춰 검증 동안만 `Application.runInBackground=true`로 바꾸고 종료 후 false로 복구했다. 코드·씬·에셋·능력치·해금·시뮬레이션 시간은 수정하지 않았다.
+- MCP 가상 포인터 click 및 분리한 down/up은 성공 응답을 반환했지만 캠프 입장으로 이어지지 않았다. 원인은 미확정이며 물리 클릭/터치 성공으로 기록하지 않는다. 이후 실제 uGUI Button의 `onClick` 콜백을 호출해 흐름을 확인했다.
+- CHALLENGE FLOOR1 → Travel → 일반 전투 → 1·2층 클리어 후 자동 진행 → 3층 클리어를 확인했다. 3층 결과는26.9초,8/8처치,HP412/540,ATK19/DEF2,60G/4석 보상. 4층은 자동 입장하지 않고 ENTER BOSS GATE 버튼을 기다렸다.
+- 보스 입장 콜백 후 4층 전투에서 후퇴3회/돌진3회, 집중 방어 버튼 요청 뒤 GuardUses1을 확인했다. 적시 방어 성공은 검증하지 않았다. 이번 시도는17.4초에 패배(영웅0/540,보스259/600),보상 없음,목표4층 유지와 FARM MATERIALS/RETURN TO FORGE 선택지를 확인했다. 보스 승리·강화 후 재도전·전체 밸런스는 이번 검증 범위가 아니다.
+- 캠프/1층/보스 Game 캡처 PNG를 생성하고 전투장 이미지를 열어 확인했다. 현재 캡처는 Overlay UI를 포함하지 않으므로 HUD/메뉴 시각 검증 근거로 쓰지 않는다. UI 문구와 결과는 런타임 Text/도메인 상태 조회로 확인했다. 캡처는 Git 제외 Temp/pipeline-screenshots/mcp-*.png에 있다.
+- Play 종료 및 백그라운드 설정 원복 확인. 기존 Packages의 미커밋 변경은 보존했다. 이번 변경은 이 문서 기록만이며 새 테스트 실행·Windows/모바일 검증은 하지 않았다. 다음 최소 확인은 가상 포인터가 UI에 전달되지 않는 원인과 Overlay UI 포함 캡처 방법이다.
+
+### 같은 날 UI 클릭 추가 진단 — 미완료 상태로 종료
+
+- 버튼 중심 좌표의 EventSystem 레이캐스트는 TOWER MAP을 찾았으나 MCP 포인터 입력으로 화면이 전환되지는 않았다. 비활성 창의 입력 라우팅과 Editor/게임 입력 갱신 차이를 조사했지만 원인은 확정하지 않았다. 실제 클릭 연결 성공으로 기록하지 않는다.
+- 임시 가상 Mouse, 복제 InputSettings의 포커스/수동 갱신 설정, UI 모듈 재활성화와 입력 이벤트 주입을 시험했다. 수동 입력 갱신에서 point 좌표는 전달됐으나 클릭 액션/화면 전환 성공은 확인하지 못했다. 게임 코드나 패키지 소스를 수정하지 않았다.
+- 가상 장치를 제거하고 시험 중 비활성화한 native 장치를 다시 활성화했다. Play 종료 후 복제 설정이 파괴된 참조가 남아 기본 InputSettings를 재생성하고 기존 PointersAndKeyboardsRespectGameViewFocus / ResetAndDisableNonBackgroundDevices / ProcessEventsInDynamicUpdate와 백그라운드 false로 복구했다. 원본 설정 객체를 그대로 복원한 것은 아니며 설정 에셋을 저장하지 않았다. JourneyPrototype은 isDirty=false였다.
+- 사용자 요청으로 추가 진단은 중단한다. 이번 커밋은 기존 공식 Pipeline 패키지 등록과 연결/여정 검증 기록을 포함하며, UI 클릭 해결이나 새로운 테스트 통과를 의미하지 않는다. 후속 필요 시 Play에서 물리 클릭이 정상인지 먼저 확인한 뒤 자동 입력 문제를 별도로 조사한다.
