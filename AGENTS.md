@@ -88,3 +88,8 @@ A separate JourneyPrototype scene connects uGUI camp/equip/enhance feedback, fou
 
 ## 12. Minimal ascent and compact HUD (2026-10-23 user-approved)
 Journey now prioritizes target-floor entry, a vertical floor map and opaque entry transition; ordinary floor1/2 clears continue to the next floor after a short result pause, stoppable by camp/map navigation. Floor4 boss entry remains manual. This narrowly supersedes the earlier no-automatic-ascent scope; failure retries/full Farming stay deferred. Preserve the blocked floor through finite material runs and enhancement. Keep combat stats in camp/results; separate the small top floor strip/bottom HUD from the camera viewport without changing orientation, logic geometry or spawns. See docs/31_JOURNEY_PLAY_FLOW.md.
+
+## 13. Handoff after the first journey loop (2026-10-23)
+The playable loop stops at floor 4. Boss clear sets `TowerCleared` and does not create floor 5. Docs list several later candidates — fail-once retry then Farming, post-boss ascent, a pure level/EXP model, local save, and storybook scenes — but none is an approved next implementation. Read the handoff table in `docs/INDEX.md` before starting new systems. Append dated notes; do not delete prior validation history or treat storybook proposals as shipped.
+
+2026-10-23 playtest kept the stair transition as a prototype and did not add farming-on-failure. A close boss now backs up before locking a charge so the fight is not only glued basic attacks. Manual Focus Guard stays manual. Details are in `docs/26_COMBAT_PROTOTYPE.md`.

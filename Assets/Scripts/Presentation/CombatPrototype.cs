@@ -289,7 +289,8 @@ namespace EnhancementTower.Presentation
                 Point a = simulation.ChargeOrigin, b = simulation.ChargeEnd, d = b - a;
                 chargeWarning.transform.localPosition = QuarterView ? QuarterViewStage.Ground((a + b) * .5f, .04f) : new Vector3((a.X + b.X) * 0.5f, (a.Y + b.Y) * 0.5f, 0);
                 chargeWarning.transform.localRotation = QuarterView ? Quaternion.LookRotation(Vector3.down, new Vector3(-d.Y, 0, d.X)) : Quaternion.Euler(0, 0, Mathf.Atan2(d.Y, d.X) * Mathf.Rad2Deg);
-                chargeWarning.transform.localScale = new Vector3(d.Length, CombatSimulation.FootRadius * 4, 1);
+                chargeWarning.color = new Color(1, 0.32f, 0.08f, 0.62f);
+                chargeWarning.transform.localScale = new Vector3(Mathf.Max(0.35f, d.Length), CombatSimulation.FootRadius * 7, 1);
             }
             sweepWarning.enabled = bossMode && simulation.Hero.Alive && simulation.Monster.Alive && simulation.BossPhase == ChargePhase.Sweep;
             if (sweepWarning.enabled)
@@ -353,7 +354,10 @@ namespace EnhancementTower.Presentation
                 view.Group.enabled = QuarterView;
                 view.Group.sortingOrder = 10000 - Mathf.RoundToInt(fighter.Position.Y * 32) * 128 + 127 - view.StableOrder;
                 view.QuarterActor.Root.gameObject.SetActive(QuarterView);
-                if (QuarterView) view.QuarterActor.Draw(fighter, fighter == simulation.Hero && simulation.GuardActive, showSwordMotion, showHitEffects);
+                bool majorAttack = fighter == simulation.ChargeBoss && (simulation.BossPhase == ChargePhase.Withdraw ||
+                    simulation.BossPhase == ChargePhase.Telegraph || simulation.BossPhase == ChargePhase.Charging ||
+                    simulation.BossPhase == ChargePhase.Sweep);
+                if (QuarterView) view.QuarterActor.Draw(fighter, fighter == simulation.Hero && simulation.GuardActive, showSwordMotion, showHitEffects, majorAttack);
             }
             view.Body.enabled = !QuarterView; view.Foot.enabled = !QuarterView;
             int depth = 100 - Mathf.RoundToInt(fighter.Position.Y * 20);
@@ -372,7 +376,11 @@ namespace EnhancementTower.Presentation
             float health = (float)fighter.Health / fighter.MaxHealth;
             view.HealthFill.transform.localScale = new Vector3(0.55f * health, 0.04f, 1);
             view.HealthFill.transform.localPosition = new Vector3(-0.275f * (1 - health), barHeight, 0);
-            view.Body.color = fighter.HitFlash > 0 ? (fighter.LastHitKind == AttackKind.Thrust ? new Color(0.6f, 1, 1) : Color.white) : fighter.Alive ? view.Color : Color.gray;
+            bool bossPattern = fighter == simulation.ChargeBoss && (simulation.BossPhase == ChargePhase.Withdraw ||
+                simulation.BossPhase == ChargePhase.Telegraph || simulation.BossPhase == ChargePhase.Charging ||
+                simulation.BossPhase == ChargePhase.Sweep);
+            view.Body.color = fighter.HitFlash > 0 ? (fighter.LastHitKind == AttackKind.Thrust ? new Color(0.6f, 1, 1) : Color.white) :
+                bossPattern && fighter.Alive ? new Color(1f, 0.42f, 0.18f) : fighter.Alive ? view.Color : Color.gray;
             Vector2 recoil = fighter.Alive ? new Vector2(fighter.HitDirection.X, fighter.HitDirection.Y) * fighter.HitFlash * 0.5f : Vector2.zero;
             view.Body.transform.localPosition = new Vector3(recoil.x, 0.3f + recoil.y, 0);
             view.Body.transform.localScale = fighter.Alive ? new Vector3(view.BodySize.x, view.BodySize.y, 1) : new Vector3(0.5f, 0.15f, 1);

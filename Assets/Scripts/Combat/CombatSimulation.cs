@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace EnhancementTower.Combat
 {
     public enum CombatState { Search, Approach, Attack, Reposition, Dead, BreakthroughAdvance, AvoidTelegraph }
-    public enum ChargePhase { Ready, Telegraph, Charging, Recovery, Reacquire, Sweep, SweepRecovery }
+    public enum ChargePhase { Ready, Withdraw, Telegraph, Charging, Recovery, Reacquire, Sweep, SweepRecovery }
 
     // Value coordinates keep the simulation independent of Unity physics and render frames.
     public struct Point
@@ -136,6 +136,7 @@ namespace EnhancementTower.Combat
         public Point ChargeOrigin { get; private set; }
         public Point ChargeEnd { get; private set; }
         public int Charges { get; private set; }
+        public int BossWithdraws { get; private set; }
         public int BossSweeps { get; private set; }
         public bool BossEnraged => ChargeBoss != null && ChargeBoss.Health <= ChargeBoss.MaxHealth / 2;
         public float BossSweepRange => ChargeBoss == null ? 0 : ChargeBoss.Range * 1.55f;
@@ -165,7 +166,8 @@ namespace EnhancementTower.Combat
             guardReadyTick = Ticks + (int)Math.Round(GuardCooldown / Tick);
             GuardUses++;
         }
-        private float chargeTime, chargeRemaining, chargeCooldown = 3;
+        private float chargeTime, chargeRemaining, chargeCooldown = 1.2f;
+        private const float ChargeOpenDistance = 2.6f, WithdrawSpeed = 5.5f, WithdrawLimit = 0.75f, MinimumChargeLane = 1.35f;
         private bool sweepHit, sweepStarted;
         private Point chargeAim, dodgeGoal;
         private bool dodgeChosen;
@@ -187,22 +189,31 @@ namespace EnhancementTower.Combat
             if (BossPhase == ChargePhase.Ready)
             {
                 if (chargeCooldown > 0 || boss.State == CombatState.Attack) return false;
-                ChargeOrigin = boss.Position; chargeAim = (Hero.Position - boss.Position).Normalized;
-                float length = chargeDistance;
-                if (chargeAim.X > 0) length = Math.Min(length, (2 - ChargeOrigin.X) / chargeAim.X);
-                if (chargeAim.X < 0) length = Math.Min(length, (-2 - ChargeOrigin.X) / chargeAim.X);
-                if (chargeAim.Y > 0) length = Math.Min(length, (4 - ChargeOrigin.Y) / chargeAim.Y);
-                if (chargeAim.Y < 0) length = Math.Min(length, (-3 - ChargeOrigin.Y) / chargeAim.Y);
-                ChargeEnd = ChargeOrigin + chargeAim * length;
-                chargeRemaining = (ChargeEnd - ChargeOrigin).Length;
-                boss.Aim = boss.AttackAim = chargeAim;
-                boss.CurrentAttack = new AttackStep(AttackKind.BossCharge, 1, telegraphSeconds * (BossEnraged ? 0.8f : 1), 0.1f, 0.5f, 180, 1, 2.5f, 0);
-                boss.State = CombatState.Search;
-                BossPhase = ChargePhase.Telegraph; chargeTime = 0; dodgeChosen = false;
+                if ((Hero.Position - boss.Position).Length < ChargeOpenDistance)
+                {
+                    BossPhase = ChargePhase.Withdraw; chargeTime = 0; BossWithdraws++;
+                    boss.State = CombatState.Search; boss.CurrentAttack = default;
+                }
+                else BeginChargeTelegraph(boss);
             }
             boss.Movement = new Point();
             boss.HitFlash = Math.Max(0, boss.HitFlash - Tick);
             boss.SlashTime = Math.Max(0, boss.SlashTime - Tick);
+            if (BossPhase == ChargePhase.Withdraw)
+            {
+                Point away = boss.Position - Hero.Position;
+                away = away.Length > 0.001f ? away.Normalized : new Point(0, 1);
+                Point before = boss.Position;
+                float room = Math.Max(0, ChargeOpenDistance - (Hero.Position - before).Length);
+                boss.Position = MoveWithoutCrossing(boss, Clamp(before + away * Math.Min(WithdrawSpeed * Tick, room)));
+                float moved = (boss.Position - before).Length;
+                boss.Movement = (boss.Position - before) * (1f / Tick);
+                boss.Aim = (Hero.Position - boss.Position).Normalized;
+                chargeTime += Tick;
+                if ((Hero.Position - boss.Position).Length >= ChargeOpenDistance - 0.02f || moved < 0.0001f || chargeTime >= WithdrawLimit)
+                    BeginChargeTelegraph(boss);
+                else return true;
+            }
             chargeTime += Tick;
             if (BossPhase == ChargePhase.Telegraph && chargeTime >= boss.CurrentAttack.Windup)
             { BossPhase = ChargePhase.Charging; chargeTime = 0; Charges++; }
@@ -232,7 +243,7 @@ namespace EnhancementTower.Combat
                 if (delta.Length <= BossSweepRange || chargeTime >= 2)
                 {
                     boss.AttackAim = boss.Aim; boss.PhaseTime = 0;
-                    boss.CurrentAttack = new AttackStep(AttackKind.BossSweep, 1, BossEnraged ? 0.32f : 0.4f,
+                    boss.CurrentAttack = new AttackStep(AttackKind.BossSweep, 1, BossEnraged ? 0.5f : 0.7f,
                         0.16f, 0.65f, BossSweepArc, 1.55f, 1.8f, 0);
                     boss.State = CombatState.Attack; boss.LastHitCount = 0;
                     BossPhase = ChargePhase.Sweep; chargeTime = 0; sweepHit = sweepStarted = false;
@@ -259,8 +270,27 @@ namespace EnhancementTower.Combat
                 }
             }
             else if (BossPhase == ChargePhase.SweepRecovery && chargeTime >= boss.CurrentAttack.Recovery)
-            { BossPhase = ChargePhase.Ready; chargeCooldown = BossEnraged ? 2.6f : 3.4f; boss.State = CombatState.Search; }
+            { BossPhase = ChargePhase.Ready; chargeCooldown = BossEnraged ? 1.8f : 2.2f; boss.State = CombatState.Search; }
             return true;
+        }
+        private void BeginChargeTelegraph(Fighter boss)
+        {
+            ChargeOrigin = boss.Position; chargeAim = (Hero.Position - boss.Position).Normalized;
+            float length = chargeDistance;
+            if (chargeAim.X > 0) length = Math.Min(length, (2 - ChargeOrigin.X) / chargeAim.X);
+            if (chargeAim.X < 0) length = Math.Min(length, (-2 - ChargeOrigin.X) / chargeAim.X);
+            if (chargeAim.Y > 0) length = Math.Min(length, (4 - ChargeOrigin.Y) / chargeAim.Y);
+            if (chargeAim.Y < 0) length = Math.Min(length, (-3 - ChargeOrigin.Y) / chargeAim.Y);
+            ChargeEnd = ChargeOrigin + chargeAim * length;
+            chargeRemaining = (ChargeEnd - ChargeOrigin).Length;
+            float gap = (Hero.Position - boss.Position).Length;
+            float windup = telegraphSeconds * (BossEnraged ? 0.8f : 1);
+            if (Hero.Speed > 0.01f && gap - Hero.Speed * windup < MinimumChargeLane)
+                windup = Math.Max(0.45f, (gap - MinimumChargeLane) / Hero.Speed);
+            boss.Aim = boss.AttackAim = chargeAim;
+            boss.CurrentAttack = new AttackStep(AttackKind.BossCharge, 1, windup, 0.1f, 0.5f, 180, 1, 2.5f, 0);
+            boss.State = CombatState.Search;
+            BossPhase = ChargePhase.Telegraph; chargeTime = 0; dodgeChosen = false;
         }
         private bool AvoidCharge()
         {
@@ -477,6 +507,17 @@ namespace EnhancementTower.Combat
             {
                 if (AvoidCharge()) return;
                 if (actor.State == CombatState.AvoidTelegraph) actor.State = CombatState.Search;
+                if (GuardActive)
+                {
+                    // A focus guard is a brace, not a swing. The window does not grant a step, a hit, or invulnerability.
+                    actor.SlashTime = 0;
+                    if (actor.State == CombatState.Attack || actor.State == CombatState.BreakthroughAdvance || actor.State == CombatState.Reposition)
+                        actor.State = CombatState.Search;
+                    repositioning = false; hasRepositionNext = false;
+                    if (ChargeBoss != null && ChargeBoss.Alive)
+                        actor.Aim = (ChargeBoss.Position - actor.Position).Normalized;
+                    return;
+                }
             }
             // Retain targets during approach/attack; reacquire between attacks or after death.
             bool keepSwingFocus = actor == Hero && actor.State == CombatState.Attack && actor.Target != null &&

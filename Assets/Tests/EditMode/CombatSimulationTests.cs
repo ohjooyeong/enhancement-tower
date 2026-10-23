@@ -68,6 +68,34 @@ public class CombatSimulationTests
         Assert.IsFalse(dead.Monster.Alive);
         Assert.IsFalse(dead.RequestBossGuard());
     }
+    [Test]
+    public void FocusGuardBracesInsteadOfContinuingTheSwing()
+    {
+        var battle = new CombatSimulation(new Fighter(new Point(0, 0), 10000, 20, 1.9f, 0.85f),
+            new Fighter(new Point(0, 0.7f), 5000, 6, 0, 0.85f));
+        battle.EnableChargeBoss(battle.Monster);
+        for (int i = 0; i < 180 && battle.Hero.State != CombatState.Attack; i++) battle.Advance(CombatSimulation.Tick);
+        Assert.AreEqual(CombatState.Attack, battle.Hero.State);
+        int attacks = battle.Hero.Attacks;
+        Assert.IsTrue(battle.RequestBossGuard());
+        battle.Advance(CombatSimulation.Tick);
+        Point held = battle.Hero.Position;
+        int hits = battle.Monster.HitsTaken;
+        Assert.IsTrue(battle.GuardActive);
+        Assert.AreEqual(CombatState.Search, battle.Hero.State);
+        while (battle.GuardActive)
+        {
+            battle.Advance(CombatSimulation.Tick);
+            if (!battle.GuardActive) break;
+            Assert.AreNotEqual(CombatState.Attack, battle.Hero.State);
+            Assert.AreEqual(held.X, battle.Hero.Position.X, 0.0001f);
+            Assert.AreEqual(held.Y, battle.Hero.Position.Y, 0.0001f);
+            Assert.AreEqual(0, battle.Hero.SlashTime, 0.0001f);
+        }
+        Assert.AreEqual(hits, battle.Monster.HitsTaken);
+        for (int i = 0; i < 180 && battle.Hero.Attacks == attacks; i++) battle.Advance(CombatSimulation.Tick);
+        Assert.Greater(battle.Hero.Attacks, attacks);
+    }
     private static CombatSimulation BossBattle(float heroSpeed = 1.9f)
     {
         var battle = new CombatSimulation(new Fighter(new Point(0, -1), 10000, 1, heroSpeed, 0.85f),
@@ -148,6 +176,38 @@ public class CombatSimulationTests
         Assert.AreEqual(hits + 1, battle.Hero.HitsTaken);
         Assert.AreEqual(1, battle.BossSweeps);
         Assert.AreEqual(AttackKind.BossSweep, battle.Hero.LastHitKind);
+    }
+    [Test]
+    public void CloseRangeChargeBacksUpBeforeLockingALane()
+    {
+        var battle = new CombatSimulation(new Fighter(new Point(0, 0), 10000, 1, 1.9f, 0.85f),
+            new Fighter(new Point(0, 0.7f), 10000, 6, 1.55f, 0.85f, 0.32f, 0.48f));
+        battle.EnableChargeBoss(battle.Monster);
+        bool withdrew = false;
+        for (int i = 0; i < 500 && battle.BossPhase != ChargePhase.Telegraph; i++)
+        {
+            battle.Advance(CombatSimulation.Tick);
+            if (battle.BossPhase == ChargePhase.Withdraw) withdrew = true;
+            Assert.GreaterOrEqual((battle.Hero.Position - battle.Monster.Position).Length, 0.559f);
+        }
+        Assert.IsTrue(withdrew);
+        Assert.AreEqual(ChargePhase.Telegraph, battle.BossPhase);
+        Assert.Greater((battle.Hero.Position - battle.ChargeOrigin).Length, 1.5f);
+        int hitsAtLane = battle.Hero.HitsTaken;
+        Point origin = battle.ChargeOrigin;
+        Point previous = battle.Monster.Position;
+        float traveled = 0;
+        for (int i = 0; i < 240 && battle.BossPhase != ChargePhase.Recovery; i++)
+        {
+            battle.Advance(CombatSimulation.Tick);
+            traveled += (battle.Monster.Position - previous).Length;
+            previous = battle.Monster.Position;
+            Assert.GreaterOrEqual((battle.Hero.Position - battle.Monster.Position).Length, 0.559f);
+            Assert.AreEqual(origin.X, battle.ChargeOrigin.X, 0.0001f);
+            Assert.AreEqual(origin.Y, battle.ChargeOrigin.Y, 0.0001f);
+        }
+        Assert.Greater(traveled, 0.65f);
+        Assert.LessOrEqual(battle.Hero.HitsTaken, hitsAtLane + 1);
     }
     [Test]
     public void SweepDoesNotHitBehindOrBeyondItsRange()

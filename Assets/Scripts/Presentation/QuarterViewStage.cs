@@ -197,7 +197,7 @@ namespace EnhancementTower.Presentation
                 trail.startColor = new Color(.65f, .88f, 1, 0); trail.endColor = new Color(.9f, .98f, 1, .65f);
                 trail.sortingOrder = 11; trail.enabled = false;
             }
-            public void Draw(Fighter fighter, bool guard, bool swordMotion = true, bool effects = true)
+            public void Draw(Fighter fighter, bool guard, bool swordMotion = true, bool effects = true, bool majorAttack = false)
             {
                 Point aim = fighter.State == CombatState.Attack ? fighter.AttackAim : fighter.Aim;
                 int direction = Mathf.Abs(aim.X) > Mathf.Abs(aim.Y) ? (aim.X < 0 ? 2 : 3) : aim.Y > 0 ? 1 : 0;
@@ -205,7 +205,8 @@ namespace EnhancementTower.Presentation
                 int frame = direction * 2 + step;
                 bool posed = hero && swordMotion;
                 body.sprite = posed ? lowerFrames[frame] : frames[frame];
-                Color tint = guard ? new Color(.35f, 1, .8f) : fighter.HitFlash > 0 ? new Color(1, .55f, .5f) : fighter.Alive ? Color.white : Color.gray;
+                Color tint = guard ? new Color(.35f, 1, .8f) : fighter.HitFlash > 0 ? new Color(1, .55f, .5f) :
+                    majorAttack && fighter.Alive ? new Color(1f, .45f, .2f) : fighter.Alive ? Color.white : Color.gray;
                 body.color = tint;
                 visual.localScale = new Vector3(scale, fighter.Alive ? scale : scale * .22f, 1);
                 shadowRenderer.enabled = fighter.Alive;
@@ -216,9 +217,9 @@ namespace EnhancementTower.Presentation
                 trail.enabled = false;
                 if (!posed) return;
                 torso.sprite = upperFrames[frame]; torso.color = tint;
-                DrawSwordPose(fighter, aim, effects);
+                DrawSwordPose(fighter, aim, effects, guard);
             }
-            private void DrawSwordPose(Fighter fighter, Point aim, bool effects)
+            private void DrawSwordPose(Fighter fighter, Point aim, bool effects, bool guard)
             {
                 AttackStep attack = fighter.CurrentAttack;
                 bool attacking = fighter.Alive && fighter.State == CombatState.Attack;
@@ -231,9 +232,9 @@ namespace EnhancementTower.Presentation
                 bool hitting = attacking && time >= attack.Windup && time < attack.Windup + attack.Active;
                 float sign = attack.Kind == AttackKind.ReverseSlash ? -1 : 1;
                 float idle = -25;
-                float sweep = !attacking ? idle : thrust ? 0 : windup ? Mathf.Lerp(idle, -85 * sign, Smooth(prepare)) : hitting ? Mathf.Lerp(-85 * sign, 85 * sign, Smooth(active)) : Mathf.Lerp(85 * sign, idle, Smooth(recover));
-                float twist = !attacking ? 0 : windup ? -13 * sign * Smooth(prepare) : hitting ? Mathf.Lerp(-13, 14, Smooth(active)) * sign : 14 * sign * (1 - Smooth(recover));
-                float lean = !attacking ? 0 : windup ? -.035f * Smooth(prepare) : .045f * (1 - Smooth(recover));
+                float sweep = guard ? 52 : !attacking ? idle : thrust ? 0 : windup ? Mathf.Lerp(idle, -85 * sign, Smooth(prepare)) : hitting ? Mathf.Lerp(-85 * sign, 85 * sign, Smooth(active)) : Mathf.Lerp(85 * sign, idle, Smooth(recover));
+                float twist = guard ? -8 : !attacking ? 0 : windup ? -13 * sign * Smooth(prepare) : hitting ? Mathf.Lerp(-13, 14, Smooth(active)) * sign : 14 * sign * (1 - Smooth(recover));
+                float lean = guard ? -.04f : !attacking ? 0 : windup ? -.035f * Smooth(prepare) : .045f * (1 - Smooth(recover));
                 Vector3 forward = BillboardDelta(aim.Normalized);
                 upperBody.localPosition = new Vector3(forward.x * lean, .55f + forward.y * lean, 0);
                 upperBody.localRotation = Quaternion.Euler(0, 0, twist);
@@ -244,7 +245,7 @@ namespace EnhancementTower.Presentation
                     return BillboardDelta(new Point(Mathf.Cos(angle), Mathf.Sin(angle)));
                 }
                 Vector3 blade = BladeDirection(sweep);
-                float reach = thrust && attacking ? windup ? .12f : hitting ? Mathf.Lerp(.15f, .5f, Smooth(active)) : Mathf.Lerp(.5f, .26f, Smooth(recover)) : .27f;
+                float reach = guard ? .2f : thrust && attacking ? windup ? .12f : hitting ? Mathf.Lerp(.15f, .5f, Smooth(active)) : Mathf.Lerp(.5f, .26f, Smooth(recover)) : .27f;
                 Vector3 chest = new Vector3(0, .74f, 0);
                 Vector3 grip = chest + blade * reach + Vector3.up * (windup ? .09f * prepare : 0);
                 weapon.transform.localPosition = grip;
@@ -264,7 +265,7 @@ namespace EnhancementTower.Presentation
                     hands[hand].transform.localScale = new Vector3(.08f, .09f, 1);
                     hands[hand].sortingOrder = behind ? 4 : 13;
                 }
-                trail.enabled = effects && hitting && !thrust;
+                trail.enabled = effects && hitting && !thrust && !guard;
                 if (trail.enabled)
                 {
                     for (int i = 0; i < trail.positionCount; i++)
